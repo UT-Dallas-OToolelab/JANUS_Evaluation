@@ -85,13 +85,23 @@ load.br.matrix <- function(matrix, mask, gal = FALSE, probe = FALSE) {
 # (get.roc.points)
 # Description: this function takes formatted data and plots the points of an ROC curve
 #
-# Input: $match and $resp data.frame
+# Input: load.br.matrix output
 #
 # Output: roc points
 # 
 ######################################################################################
 
-get.roc.points <- function(data, n.points = 5, distance = TRUE, response = data$resp) {
+get.roc.points <- function(data, n.points = 500, distance = FALSE, response = data$resp) {
+  
+  #Allow load.br.matrix matrices to be input directly into this function
+  if (!is.null(getElement(data, "matrix")) & !is.null(getElement(data, "mask")) & !is.null(getElement(data, "distance"))) {
+    distance = data$distance
+    match <- character()
+    match[data$mask == -1] <- "m"
+    match[data$mask == 127] <- "nm"
+    
+    data <- data.frame(match = match, resp = data$matrix)
+  }
   
   #Define a variable just below the (functionally) Inf value to limit the range to actual values
   pre.inf <- 3.402*10^38
@@ -150,6 +160,10 @@ get.roc.points <- function(data, n.points = 5, distance = TRUE, response = data$
 
 plot.roc <- function(data, ...) {
   
+  if (!is.null(getElement(data, "matrix")) & !is.null(getElement(data, "mask")) & !is.null(getElement(data, "distance"))) {
+    data <- get.roc.points(data)
+  }
+  
   args <- list(...)
   
   if (!is.null(getElement(args, "log"))) data[data == 0] <- 1*10^-50
@@ -158,26 +172,4 @@ plot.roc <- function(data, ...) {
   if (is.null(getElement(args, "type"))) args$type <- "l"
   if (is.null(getElement(args, "col"))) args$col <- "blue"
   do.call(plot, args)
-  
-  return(data)
-}
-
-######################################################################################
-# (for.roc)
-# Description: this function reformats load.br.matrix output to be used in the get.roc.points function
-#
-# Input: load.br.matrix output
-#
-# Output: data to be input into get.roc.points
-# 
-######################################################################################
-
-for.roc <- function(data) {
-  match <- character()
-  match[data$mask == -1] <- "m"
-  match[data$mask == 127] <- "nm"
-  
-  output <- data.frame(match = match, resp = data$matrix)
-  
-  return(output)
 }
