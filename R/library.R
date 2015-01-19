@@ -198,7 +198,6 @@ plot.roc <- function(data, add = FALSE, ...) {
 
 load.multiple.matrices<-function(COTS) {
   
-  
   ## Get data ##
   
   #initialize lists
