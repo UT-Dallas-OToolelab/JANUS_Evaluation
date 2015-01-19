@@ -185,3 +185,54 @@ plot.roc <- function(data, add = FALSE, ...) {
   if (add == TRUE) do.call(lines, args)
   else do.call(plot, args)
 }
+
+
+######################################################################################
+# Get multiple matrices across all scripts with corresponding masks and metadata
+#
+#input: desigate whith alg you're examining (COTS) as a string
+#output: nested list with all matrices, masks, gal, and probe csvs from all splits
+######################################################################################
+
+load.multiple.matrices<-function(COTS) {
+  
+  
+  ## Load directory of janus functions and other libraries If not on local computer, download the library from:
+  #https://raw.githubusercontent.com/UT-Dallas-OToolelab/JANUS_Evaluation/master/R/library.R
+  #then change this source path accordingly
+  
+  source('~/UTD_Research/EXPTS-14/JANUS/GitHub/JANUS_Evaluation/R/library.R')
+  setwd('~/UTD_Research/EXPTS-14/JANUS/JANUS_Drive/CS0/')
+  
+  ## Get data ##
+  
+  #initialize lists
+  all.splits=list()
+  all.splits$A=list()
+  all.splits$B=list()
+  all.splits$A$split=list()
+  all.splits$A$split=list()
+  
+  #get data for givin algorithm
+  cots.name=COTS
+  for (i in 1:10){ 
+    test.name=paste(i,'_A',sep='')
+    mat.to.load.A=paste('./benchmarks/',cots.name,'/split',i,'/verify_',test.name,'.mtx',sep='')
+    mask.to.load.A=paste('./benchmarks/',cots.name,'/split',i,'/verify_',test.name,'.mask',sep='')
+    gal.csv.A=paste('./protocol/split',i,'/test_',test.name,'_gal.csv',sep='')
+    probe.csv.A=paste('./protocol/split',i,'/test_',test.name,'_probe.csv',sep='')
+    
+    test.name=paste(i,'_B',sep='')
+    mat.to.load.B=paste('./benchmarks/',cots.name,'/split',i,'/verify_',test.name,'.mtx',sep='')
+    mask.to.load.B=paste('./benchmarks/',cots.name,'/split',i,'/verify_',test.name,'.mask',sep='')
+    gal.csv.B=paste('./protocol/split',i,'/test_',test.name,'_gal.csv',sep='')
+    probe.csv.B=paste('./protocol/split',i,'/test_',test.name,'_probe.csv',sep='')
+    
+    all.splits$A$split[[i]]=load.br.matrix(mat.to.load.A,mask.to.load.A,gal.csv.A,probe.csv.A)
+    all.splits$B$split[[i]]=load.br.matrix(mat.to.load.B,mask.to.load.B,gal.csv.B,probe.csv.B)
+    
+  }
+  
+  return(all.splits)
+  
+}
