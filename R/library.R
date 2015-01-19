@@ -190,19 +190,14 @@ plot.roc <- function(data, add = FALSE, ...) {
 ######################################################################################
 # Get multiple matrices across all scripts with corresponding masks and metadata
 #
+#TO USE: setwd to whatever challenge set you're using. eg: setwd('~/JANUS_Drive/CS0/')
+#
 #input: desigate whith alg you're examining (COTS) as a string
 #output: nested list with all matrices, masks, gal, and probe csvs from all splits
 ######################################################################################
 
 load.multiple.matrices<-function(COTS) {
   
-  
-  ## Load directory of janus functions and other libraries If not on local computer, download the library from:
-  #https://raw.githubusercontent.com/UT-Dallas-OToolelab/JANUS_Evaluation/master/R/library.R
-  #then change this source path accordingly
-  
-  source('~/UTD_Research/EXPTS-14/JANUS/GitHub/JANUS_Evaluation/R/library.R')
-  setwd('~/UTD_Research/EXPTS-14/JANUS/JANUS_Drive/CS0/')
   
   ## Get data ##
   
