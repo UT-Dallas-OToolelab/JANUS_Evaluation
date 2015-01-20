@@ -239,17 +239,5 @@ plot.roc.simple <- function(roc.points,...) {
 plot(01,.98,type='n',xlim=c(0.0,1.0),ylim=c(0.0,1.0),,...)
   lines(roc.points[[1]],roc.points[[2]])
 }
-  
-######################################################################################
-copmpute.dprime <- function(roc.points,...) {
-  ######################################################################################
-  #AH
-  #Input roc points and get curve - nothin' fancy
-  #
-  ######################################################################################
-  
-  plot(01,.98,type='n',xlim=c(0.0,1.0),ylim=c(0.0,1.0),,...)
-  lines(roc.points[[1]],roc.points[[2]])
-}
 
 
