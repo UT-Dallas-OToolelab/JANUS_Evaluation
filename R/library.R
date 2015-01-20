@@ -188,24 +188,21 @@ plot.roc <- function(data, add = FALSE, ...) {
 
 
 ######################################################################################
-# Get multiple matrices across all scripts with corresponding masks and metadata
-#
-#TO USE: setwd to whatever challenge set you're using. eg: setwd('~/JANUS_Drive/CS0/')
-#
-#input: desigate whith alg you're examining (COTS) as a string
-#output: nested list with all matrices, masks, gal, and probe csvs from all splits
-######################################################################################
-
 load.multiple.matrices<-function(COTS) {
+######################################################################################
+  #AH 
+  #Get multiple matrices across all scripts with corresponding masks and metadata
+  #
+  #TO USE: setwd to whatever challenge set you're using. eg: setwd('~/JANUS_Drive/CS0/')
+  #
+  #input: desigate whith alg you're examining (COTS) as a string
+  #output: nested list with all matrices, masks, gal, and probe csvs from all splits
+######################################################################################
   
-  ## Get data ##
+## Get data ##
   
   #initialize lists
-  all.splits=list()
-  all.splits$A=list()
-  all.splits$B=list()
-  all.splits$A$split=list()
-  all.splits$A$split=list()
+  all.splits=list(A=list(split=list()),B=list(split=list()))
   
   #get data for givin algorithm
   cots.name=COTS
@@ -230,3 +227,29 @@ load.multiple.matrices<-function(COTS) {
   return(all.splits)
   
 }
+
+######################################################################################
+plot.roc.simple <- function(roc.points,...) {
+  ######################################################################################
+  #AH
+  #Input roc points and get curve - nothin' fancy
+  #
+  ######################################################################################
+
+plot(01,.98,type='n',xlim=c(0.0,1.0),ylim=c(0.0,1.0),,...)
+  lines(roc.points[[1]],roc.points[[2]])
+}
+  
+######################################################################################
+copmpute.dprime <- function(roc.points,...) {
+  ######################################################################################
+  #AH
+  #Input roc points and get curve - nothin' fancy
+  #
+  ######################################################################################
+  
+  plot(01,.98,type='n',xlim=c(0.0,1.0),ylim=c(0.0,1.0),,...)
+  lines(roc.points[[1]],roc.points[[2]])
+}
+
+
