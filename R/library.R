@@ -240,7 +240,7 @@ load.multiple.matrices<-function(COTS) {
 
 
 ######################################################################################
-# (plot.roc)
+# (mean.roc)
 # Description: This function takes lists of loaded matrices and gets a mean ROC of them
 #
 # Input: list of load.br.matrix() output
