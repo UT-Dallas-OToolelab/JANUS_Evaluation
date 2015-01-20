@@ -271,4 +271,5 @@ mean.roc <- function(data, n.points = 500) {
   }
   
   output <- data.frame(False.Alarms = colMeans(FAR), Hits = colMeans(HR))
+  return(output)
 }
