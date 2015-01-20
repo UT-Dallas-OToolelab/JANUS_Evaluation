@@ -171,7 +171,7 @@ get.roc.points <- function(data, n.points = 500, distance = FALSE, response = da
 plot.roc <- function(data, add = FALSE, ...) {
   
   if (!is.null(getElement(data, "matrix")) & !is.null(getElement(data, "mask")) & !is.null(getElement(data, "distance"))) {
-    data <- get.roc.points(data)
+    data <- get.roc.points(data, distance = data$distance)
   }
   
   args <- list(...)
@@ -188,6 +188,14 @@ plot.roc <- function(data, add = FALSE, ...) {
 
 
 ######################################################################################
+# Get multiple matrices across all scripts with corresponding masks and metadata
+#
+#TO USE: setwd to whatever challenge set you're using. eg: setwd('~/JANUS_Drive/CS0/')
+#
+#input: designate which alg you're examining (COTS) as a string
+#output: nested list with all matrices, masks, gal, and probe csvs from all splits
+######################################################################################
+
 load.multiple.matrices<-function(COTS) {
 ######################################################################################
   #AH 
@@ -202,42 +210,65 @@ load.multiple.matrices<-function(COTS) {
 ## Get data ##
   
   #initialize lists
-  all.splits=list(A=list(split=list()),B=list(split=list()))
+  all.splits <- list(A = list(split = list()),
+                     B = list(split = list()))
   
-  #get data for givin algorithm
-  cots.name=COTS
+  #get data for given algorithm
+  cots.name <- COTS
   for (i in 1:10){ 
-    test.name=paste(i,'_A',sep='')
-    mat.to.load.A=paste('./benchmarks/',cots.name,'/split',i,'/verify_',test.name,'.mtx',sep='')
-    mask.to.load.A=paste('./benchmarks/',cots.name,'/split',i,'/verify_',test.name,'.mask',sep='')
-    gal.csv.A=paste('./protocol/split',i,'/test_',test.name,'_gal.csv',sep='')
-    probe.csv.A=paste('./protocol/split',i,'/test_',test.name,'_probe.csv',sep='')
+    test.name <- c(sprintf('%s_A',i),
+                   sprintf('%s_B',i))
     
-    test.name=paste(i,'_B',sep='')
-    mat.to.load.B=paste('./benchmarks/',cots.name,'/split',i,'/verify_',test.name,'.mtx',sep='')
-    mask.to.load.B=paste('./benchmarks/',cots.name,'/split',i,'/verify_',test.name,'.mask',sep='')
-    gal.csv.B=paste('./protocol/split',i,'/test_',test.name,'_gal.csv',sep='')
-    probe.csv.B=paste('./protocol/split',i,'/test_',test.name,'_probe.csv',sep='')
+    #Initialize/clear strings for pathnames of matrices and metadata
+    mat <- character() ; mask <- character() ; gal <- character() ; probe <- character()
+    #Iterate pathnames
+    for (e in 1:2) {
+      mat <- c(mat, sprintf('./benchmarks/%s/split%s/verify_%s.mtx', cots.name, i, test.name[e]))
+      mask <- c(mask, sprintf('./benchmarks/%s/split%s/verify_%s.mask', cots.name, i, test.name[e]))
+      gal <- c(gal, sprintf('./protocol/split%s/test_%s_gal.csv', i, test.name[e]))
+      probe <- c(probe, sprintf('./protocol/split%s/test_%s_probe.csv', i, test.name[e]))
+    }
     
-    all.splits$A$split[[i]]=load.br.matrix(mat.to.load.A,mask.to.load.A,gal.csv.A,probe.csv.A)
-    all.splits$B$split[[i]]=load.br.matrix(mat.to.load.B,mask.to.load.B,gal.csv.B,probe.csv.B)
+    
+    all.splits$A$split[[i]] <- load.br.matrix(mat[1],mask[1],gal[1],probe[1])
+    all.splits$B$split[[i]] <- load.br.matrix(mat[2],mask[2],gal[2],probe[2])
     
   }
   
   return(all.splits)
-  
 }
+
 
 ######################################################################################
-plot.roc.simple <- function(roc.points,...) {
-  ######################################################################################
-  #AH
-  #Input roc points and get curve - nothin' fancy
-  #
-  ######################################################################################
+# (plot.roc)
+# Description: This function takes lists of loaded matrices and gets a mean ROC of them
+#
+# Input: list of load.br.matrix() output
+#
+# Output: mean roc points
+# 
+######################################################################################
 
-plot(01,.98,type='n',xlim=c(0.0,1.0),ylim=c(0.0,1.0),,...)
-  lines(roc.points[[1]],roc.points[[2]])
+#This function takes lists of matrices and gets a mean ROC of them
+mean.roc <- function(data, n.points = 500) {
+  
+  #Convert raw scores to ROC points
+  data <- lapply(data, get.roc.points, n.points = n.points)
+  
+  #output <- data.frame(False.Alarms = numeric(), Hits = numeric())
+  #Get means of returned data
+  
+  FAR <- matrix(nrow = length(data), ncol = length(data[[1]]$False.Alarms)) ; HR <- FAR
+  
+  #data is the list of get.roc.points output data frames
+  #data[[e]] is the current data frame
+  #data[[e]][[i]] is the current point in the current data frame
+  for (i in 1:ncol(FAR)) {
+    for (e in 1:nrow(FAR)) {
+      FAR[e,i] <- data[[e]]$False.Alarms[i]
+      HR[e,i] <- data[[e]]$Hits[i]
+    }
+  }
+  
+  output <- data.frame(False.Alarms = colMeans(FAR), Hits = colMeans(HR))
 }
-
-
