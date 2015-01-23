@@ -111,6 +111,8 @@ get.roc.points <- function(data, n.points = 500, distance = FALSE, response = da
     match[data$mask == 127] <- "nm"
     
     data <- data.frame(match = match, resp = data$matrix)
+    
+    response <- data$resp
   }
   
   #Define a variable just below the (functionally) Inf value to limit the range to actual values
@@ -158,6 +160,41 @@ get.roc.points <- function(data, n.points = 500, distance = FALSE, response = da
 }
 
 ######################################################################################
+# (get.roc.subgroup)
+# Input: takes a load.br.matrix() matrix including masks from add.mask()
+#
+# Output: list of roc points paired with strings describing their subgroup
+######################################################################################
+
+get.roc.subgroup <- function(data, n.points = 500, distance = FALSE, response = data$resp) {
+  
+  output <- list()
+  
+  for(i in 1:length(data$group)) {
+    
+    if (data$group[[i]]$probe == TRUE) {
+      group.matrix <- as.vector(matrix(data$matrix, data$dimensions[2], data$dimensions[1])[,data$group[[i]]$mask])
+      group.mask <- as.vector(matrix(data$mask, data$dimensions[2], data$dimensions[1])[,data$group[[i]]$mask])
+    } else {
+      group <- as.vector(matrix(data$matrix, data$dimensions[2], data$dimensions[1])[data$group[[i]]$mask,])
+      group.mask <- as.vector(matrix(data$mask, data$dimensions[2], data$dimensions[1])[data$group[[i]]$mask,])
+    }
+    
+    distance = data$distance
+    match <- character()
+    match[group.mask == -1] <- "m"
+    match[group.mask == 127] <- "nm"
+    
+    group.data <- data.frame(match = match, resp = group.matrix)
+    
+    output[[i]] <- list(name = data$group[[i]]$name, points = get.roc.points(group.data, n.points = n.points,
+                                                                             distance = distance))
+  }
+  
+  return(output)
+}
+
+######################################################################################
 # (plot.roc)
 # Description: this function uses the plot function with defaults optimized for ROC
 # curve plotting. Set "add = TRUE" to add a new line to an existing graph.
@@ -186,6 +223,33 @@ plot.roc <- function(data, add = FALSE, ...) {
   else do.call(plot, args)
 }
 
+# UNFINISHED
+plot.rocs <- function(roc.list, add = FALSE, ...) {
+  
+  args <- list(...)
+  
+  #Add color lists
+  if(!is.null(getElement(args, "cols"))) {
+    
+    color <-args$cols
+    
+    args$cols <- NULL
+  }
+  
+  if(!is.null(getElement(roc.list, "group"))) {
+    roc.list <- get.roc.subgroup(roc.list)
+  }
+  
+  plot.roc(roc.list[[1]]$points, add = add, col = color[1], args)
+  
+  if(length(roc.list) > 1) {
+    for(i in 2:length(roc.list)) {
+      plot.roc(roc.list[[i]]$points, add = TRUE, col = color[i])
+    }
+  }
+  
+  return(list(names = unlist(get.sub.elements(roc.list, "name")), color = color))
+}
 
 ######################################################################################
 # Get multiple matrices across all scripts with corresponding masks and metadata
@@ -197,15 +261,6 @@ plot.roc <- function(data, add = FALSE, ...) {
 ######################################################################################
 
 load.multiple.matrices<-function(COTS) {
-######################################################################################
-  #AH 
-  #Get multiple matrices across all scripts with corresponding masks and metadata
-  #
-  #TO USE: setwd to whatever challenge set you're using. eg: setwd('~/JANUS_Drive/CS0/')
-  #
-  #input: desigate whith alg you're examining (COTS) as a string
-  #output: nested list with all matrices, masks, gal, and probe csvs from all splits
-######################################################################################
   
 ## Get data ##
   
@@ -271,5 +326,39 @@ mean.roc <- function(data, n.points = 500) {
   }
   
   output <- data.frame(False.Alarms = colMeans(FAR), Hits = colMeans(HR))
+  return(output)
+}
+
+#################################################################################################
+# (add.mask)
+# Description: adds a mask to a matrix file
+# 
+# NOTE: not yet supported by get.roc.points or plot.roc
+# NOTE: can't yet handle both probe and gallery masks when used multiple times
+#
+#################################################################################################
+add.mask <- function(matrix, meta.data, argument, mask.name, probe = TRUE) {
+  
+  #generate mask from given argument
+  output <- unique(meta.data$TEMPLATE_ID) %in% meta.data$TEMPLATE_ID[eval(parse(text = argument))]
+  
+  mask <- list(mask = output, name = mask.name, probe = probe)
+  
+  #if this 
+  if (!is.null(getElement(matrix, "group"))) {
+    matrix$group[[length(matrix$group) + 1]] <- mask
+  } else {
+    matrix$group <- list(mask)
+  }
+  
+  return(matrix)
+}
+
+# Get list[[i]]$sub.element for all i in list
+get.sub.elements <- function(list, sub.element) {
+  output <- list()
+  for(i in 1:length(list)) {
+    output[[i]] <- getElement(list[[i]], sub.element)
+  }
   return(output)
 }
