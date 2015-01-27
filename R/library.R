@@ -461,3 +461,26 @@ sub.elements <- function(list, sub.element) {
   }
   return(output)
 }
+
+
+add.img.frame.masks <- function(matrix, meta.data, probe = TRUE, clear.old = TRUE) {
+  
+  #################################################################################################
+  # Description: Adds a mask for 1.) images only, 2.) video only, and 3.) both images and video.
+  # These masks are important/complicated enough to warrant their own function.
+  # 
+  # Input: load.mtx() matrix, gallery or probe data frame from csv, is the meta-data probe or gallery? (T/F)
+  #
+  # Output: load.mtx() matrices + subgroup masks
+  #################################################################################################
+  
+  #Get "image and video" group
+  matrix <- add.mask(matrix, meta.data, "grepl('img', meta.data$FILE)", "Only video", probe = probe)
+  matrix <- add.mask(matrix, meta.data, "grepl('frame', meta.data$FILE)", "Only images", probe = probe)
+  matrix <- intersect(matrix, length(matrix$group), length(matrix$group) - 1, name = "Images and video", argument = "and", clear.old = clear.old)
+  
+  matrix$group[[length(matrix$group) - 2]]$mask <- !matrix$group[[length(matrix$group) - 2]]$mask
+  matrix$group[[length(matrix$group) - 1]]$mask <- !matrix$group[[length(matrix$group) - 1]]$mask
+  
+  return(matrix)
+}
