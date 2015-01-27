@@ -1,24 +1,22 @@
-######################################################################################
-# (load.br.matrix)
-# Description: this function loads a matrix and mask, with optional parameters
-# for associated gallery and probe .csv files, and outputs a list of pertinent
-# data and metadata for convenience in further analysis.
-#
-# Input: matrix filename, mask filename, gallery csv filename (optional),
-# probe csv filename (optional)
-#
-# Output: 6 item list:
-# 1) Matrix data (numeric vector of similarity/distance scores)
-# 2) Mask data (numeric vector: -1 == match, 127 == non-match, 0 == ignored)
-# 3) Matrix dimensions (numeric vector: rows x columns)
-# 4) Distance (logical value: TRUE for distance scores, FALSE for simmilarity scores)
-# 5) Protocol (2 item list: 1 - gallery csv data, 2 - probe csv data)
-# 6) Filename (4 item list: 1 - matrix filename, 2 - mask filename, 3 - gallery
-#    csv filename, 4 - probe csv filename)
-# 
-######################################################################################
+load.mtx <- function(matrix, mask, gal = FALSE, probe = FALSE) {
 
-load.br.matrix <- function(matrix, mask, gal = FALSE, probe = FALSE) {
+  ######################################################################################
+  # Description: this function loads a matrix and mask, with optional parameters
+  # for associated gallery and probe .csv files, and outputs a list of useful
+  # data and metadata for convenience in further analysis.
+  #
+  # Input: matrix filename, mask filename, gallery csv filename (optional),
+  # probe csv filename (optional)
+  #
+  # Output: 6 item list:
+  # 1) Matrix similarity data (numeric vector of similarity/distance scores)
+  # 2) Mask data (numeric vector: -1 == match, 127 == non-match, 0 == ignored)
+  # 3) Matrix dimensions (numeric vector: rows x columns)
+  # 4) Distance (logical value: TRUE for distance scores, FALSE for similarity scores)
+  # 5) Protocol (2 item list: 1 - gallery csv data, 2 - probe csv data)
+  # 6) Filename (4 item list: 1 - matrix filename, 2 - mask filename, 3 - gallery
+  #    csv filename, 4 - probe csv filename)
+  ######################################################################################
   
   #open matrix file
   to.read <- file(matrix, "rb")
@@ -91,17 +89,17 @@ load.br.matrix <- function(matrix, mask, gal = FALSE, probe = FALSE) {
   return(output)
 }
 
-######################################################################################
-# (get.roc.points)
-# Description: this function takes formatted data and plots the points of an ROC curve
-#
-# Input: load.br.matrix output
-#
-# Output: roc points
-# 
-######################################################################################
 
 get.roc.points <- function(data, n.points = 500, distance = FALSE, response = data$resp) {
+  
+  ######################################################################################
+  # Description: this function takes formatted data and plots the points of an ROC curve
+  #
+  # Input: load.mtx() output; or a data frame with a "match" column of "m" and "nm"
+  # for "match" and "non-match", and a "resp" column of similarity scores.
+  #
+  # Output: roc points
+  ######################################################################################
   
   #Allow load.br.matrix matrices to be input directly into this function
   if (!is.null(getElement(data, "matrix")) & !is.null(getElement(data, "mask")) & !is.null(getElement(data, "distance"))) {
@@ -159,53 +157,60 @@ get.roc.points <- function(data, n.points = 500, distance = FALSE, response = da
   return(ROC)
 }
 
-######################################################################################
-# (get.roc.subgroup)
-# Input: takes a load.br.matrix() matrix including masks from add.mask()
-#
-# Output: list of roc points paired with strings describing their subgroup
-######################################################################################
 
 get.roc.subgroup <- function(data, n.points = 500, distance = FALSE, response = data$resp) {
+
+  ######################################################################################
+  # Description: this function calculates a separate ROC curve for however many masks
+  # have been added to the input data matrix using the add.mask() function.
+  #
+  # Input: takes a load.mtx() matrix, including masks obtained from add.mask()
+  #
+  # Output: list of groups of roc points paired with their titles
+  ######################################################################################
   
+  #initialize output variable
   output <- list()
   
+  #for each mask defined in the "group" list in the data matrix
   for(i in 1:length(data$group)) {
-    
+    #if the mask applies to the gallery (rows) or probe (columns)
     if (data$group[[i]]$probe == TRUE) {
+      #apply the mask by converting the .mask and .mtx scores to matrix form, and removing the masked columns
       group.matrix <- as.vector(matrix(data$matrix, data$dimensions[2], data$dimensions[1])[,data$group[[i]]$mask])
       group.mask <- as.vector(matrix(data$mask, data$dimensions[2], data$dimensions[1])[,data$group[[i]]$mask])
     } else {
+      #apply the mask by converting the .mask and .mtx scores to matrix form, and removing the masked rows
       group <- as.vector(matrix(data$matrix, data$dimensions[2], data$dimensions[1])[data$group[[i]]$mask,])
       group.mask <- as.vector(matrix(data$mask, data$dimensions[2], data$dimensions[1])[data$group[[i]]$mask,])
     }
     
+    #convert masked data to get.roc.points() format (data frame with "match" and "resp" columns)
     distance = data$distance
     match <- character()
     match[group.mask == -1] <- "m"
     match[group.mask == 127] <- "nm"
-    
     group.data <- data.frame(match = match, resp = group.matrix)
     
+    #output a list with the provided subgroup title and roc points (this repeats for each mask in data$group)
     output[[i]] <- list(name = data$group[[i]]$name, points = get.roc.points(group.data, n.points = n.points,
                                                                              distance = distance))
-  }
+  } #end of loop
   
   return(output)
 }
 
-######################################################################################
-# (plot.roc)
-# Description: this function uses the plot function with defaults optimized for ROC
-# curve plotting. Set "add = TRUE" to add a new line to an existing graph.
-#
-# Input: load.br.matrix() or get.roc.points() output
-#
-# Output: roc graph
-# 
-######################################################################################
 
 plot.roc <- function(data, add = FALSE, ...) {
+
+  ######################################################################################
+  # Description: this function uses the plot function with defaults optimized for ROC
+  # curve plotting. Set "add = TRUE" to add a new line to an existing graph.
+  #
+  # Input: load.br.matrix() or get.roc.points() output
+  #
+  # Output: roc graph
+  ######################################################################################
   
   if (!is.null(getElement(data, "matrix")) & !is.null(getElement(data, "mask")) & !is.null(getElement(data, "distance"))) {
     data <- get.roc.points(data, distance = data$distance)
@@ -223,89 +228,122 @@ plot.roc <- function(data, add = FALSE, ...) {
   else do.call(plot, args)
 }
 
-# UNFINISHED
-plot.rocs <- function(roc.list, add = FALSE, ...) {
+
+plot.rocs <- function(roc.list, add = FALSE, legend = TRUE, col = rainbow(length(roc.list)), ...) {
+  
+  ######################################################################################
+  # Description: this function iterates the plot.roc() function for every ROC subgroup
+  # contained in the input variable you feed it, drawing a new line for each group.
+  #
+  # Input: load.mtx() + add.mask() output, or get.roc.subgroup() output; add to existing
+  # plot? (TRUE for yes, FALSE for no); plot legend? (T/F); vector of ROC curve colors
+  #
+  # Output: ROC graph.
+  ######################################################################################
   
   args <- list(...)
-  
-  #Add color lists
-  if(!is.null(getElement(args, "cols"))) {
-    
-    color <-args$cols
-    
-    args$cols <- NULL
-  }
   
   if(!is.null(getElement(roc.list, "group"))) {
     roc.list <- get.roc.subgroup(roc.list)
   }
   
-  plot.roc(roc.list[[1]]$points, add = add, col = color[1], args)
+  plot.roc(roc.list[[1]]$points, add = add, col = col[1], args)
   
   if(length(roc.list) > 1) {
     for(i in 2:length(roc.list)) {
-      plot.roc(roc.list[[i]]$points, add = TRUE, col = color[i])
+      plot.roc(roc.list[[i]]$points, add = TRUE, col = col[i])
     }
   }
   
-  return(list(names = unlist(get.sub.elements(roc.list, "name")), color = color))
-}
-
-######################################################################################
-# Get multiple matrices across all scripts with corresponding masks and metadata
-#
-#TO USE: setwd to whatever challenge set you're using. eg: setwd('~/JANUS_Drive/CS0/')
-#
-#input: designate which alg you're examining (COTS) as a string
-#output: nested list with all matrices, masks, gal, and probe csvs from all splits
-######################################################################################
-
-load.multiple.matrices<-function(COTS) {
-  
-## Get data ##
-  
-  #initialize lists
-  all.splits <- list(A = list(split = list()),
-                     B = list(split = list()))
-  
-  #get data for given algorithm
-  cots.name <- COTS
-  for (i in 1:10){ 
-    test.name <- c(sprintf('%s_A',i),
-                   sprintf('%s_B',i))
-    
-    #Initialize/clear strings for pathnames of matrices and metadata
-    mat <- character() ; mask <- character() ; gal <- character() ; probe <- character()
-    #Iterate pathnames
-    for (e in 1:2) {
-      mat <- c(mat, sprintf('./benchmarks/%s/split%s/verify_%s.mtx', cots.name, i, test.name[e]))
-      mask <- c(mask, sprintf('./benchmarks/%s/split%s/verify_%s.mask', cots.name, i, test.name[e]))
-      gal <- c(gal, sprintf('./protocol/split%s/test_%s_gal.csv', i, test.name[e]))
-      probe <- c(probe, sprintf('./protocol/split%s/test_%s_probe.csv', i, test.name[e]))
-    }
-    
-    
-    all.splits$A$split[[i]] <- load.br.matrix(mat[1],mask[1],gal[1],probe[1])
-    all.splits$B$split[[i]] <- load.br.matrix(mat[2],mask[2],gal[2],probe[2])
-    
+  if(legend == TRUE) {
+    legend(x = "bottomright", legend = sub.elements(roc.list, "name"), fill = col)
   }
   
-  return(all.splits)
+  return(list(names = unlist(sub.elements(roc.list, "name")), color = col))
 }
 
 
-######################################################################################
-# (mean.roc)
-# Description: This function takes lists of loaded matrices and gets a mean ROC of them
-#
-# Input: list of load.br.matrix() output
-#
-# Output: mean roc points
-# 
-######################################################################################
+load.matrices<-function(shared.drive, algorithm.name, track, split) {
+  
+  ######################################################################################
+  # Description: Get multiple matrices
+  #
+  # Input: Shared drive folder, algorithm name, vector of tracks, and vector of splits
+  #
+  # Output: list of load.mtx() matrices
+  ######################################################################################
+  
+  split <- as.character(split)
+  output <- list()
+  i <- 1
+  
+  for (trk in track) {
+    for (spl in split) {
+      
+      if (algorithm.name == "COTS1") {
+        
+        output[[i]] <- load.mtx(sprintf("%s/CS0/benchmarks/COTS1/split%s/verify_%s_%s.mtx", shared.drive, spl, spl, trk),
+                                sprintf("%s/CS0/benchmarks/COTS1/split%s/verify_%s_%s.mask", shared.drive, spl, spl, trk),
+                                sprintf("%s/CS0/protocol/split%s/test_%s_%s_gal.csv", shared.drive, spl, spl, trk),
+                                sprintf("%s/CS0/protocol/split%s/test_%s_%s_probe.csv", shared.drive, spl, spl, trk))
+        i <- i + 1
+        
+      } else if (algorithm.name == "COTS2") {
+        
+        output[[i]] <- load.mtx(sprintf("%s/CS0/benchmarks/COTS2/split%s/verify_%s_%s.mtx", shared.drive, spl, spl, trk),
+                                sprintf("%s/CS0/benchmarks/COTS2/split%s/verify_%s_%s.mask", shared.drive, spl, spl, trk),
+                                sprintf("%s/CS0/protocol/split%s/test_%s_%s_gal.csv", shared.drive, spl, spl, trk),
+                                sprintf("%s/CS0/protocol/split%s/test_%s_%s_probe.csv", shared.drive, spl, spl, trk))
+        i <- i + 1
+        
+      } else if (algorithm.name == "stereo") {
+        
+        if (spl == "6" & trk == "B") {
+          message("WARNING: at the time this code was written, stereo 6 B was not in the shared drive. Skipping it to avoid errors.")
+        } else {
+          output[[i]] <- load.mtx(sprintf("%s/stereo/stereo-results-%s-%s/scores.mtx", shared.drive, spl, tolower(trk)),
+                                  sprintf("%s/stereo/stereo-results-%s-%s/mask.mask", shared.drive, spl, tolower(trk)),
+                                  sprintf("%s/CS0/protocol/split%s/test_%s_%s_gal.csv", shared.drive, spl, spl, trk),
+                                  sprintf("%s/CS0/protocol/split%s/test_%s_%s_probe.csv", shared.drive, spl, spl, trk))
+          i <- i + 1
+        }
+                              
+      } else if (algorithm.name == "umdfv") {
+        
+        output[[i]] <- load.mtx(sprintf("%s/umdfv/UMD-20150102-001-%s-%s.mtx", shared.drive, trk, spl),
+                                sprintf("%s/umdfv/mask_%s%s.mask", shared.drive, spl, trk),
+                                sprintf("%s/CS0/protocol/split%s/test_%s_%s_gal.csv", shared.drive, spl, spl, trk),
+                                sprintf("%s/CS0/protocol/split%s/test_%s_%s_probe.csv", shared.drive, spl, spl, trk))
+        i <- i + 1
+        
+      } else {
+        message("The algorithm you entered is not supported. Check your spelling/capitalization and try again.")
+        message("Supported algorithms: COTS1, COTS2, stereo, umdfv")
+        stop()
+      }
+      
+      
+      
+    }
+  }
+  
+  if(length(output) == 1) {
+    output <- output[[1]]
+  }
+  
+  return(output)
+}
 
-#This function takes lists of matrices and gets a mean ROC of them
+
 mean.roc <- function(data, n.points = 500) {
+  
+  ######################################################################################
+  # Description: This function takes a list of load.mtx() matrices and gets their mean ROC
+  #
+  # Input: list of load.mtx() matrices
+  #
+  # Output: mean ROC points data frame
+  ######################################################################################
   
   #Convert raw scores to ROC points
   data <- lapply(data, get.roc.points, n.points = n.points)
@@ -329,15 +367,17 @@ mean.roc <- function(data, n.points = 500) {
   return(output)
 }
 
-#################################################################################################
-# (add.mask)
-# Description: adds a mask to a matrix file
-# 
-# NOTE: not yet supported by get.roc.points or plot.roc
-# NOTE: can't yet handle both probe and gallery masks when used multiple times
-#
-#################################################################################################
+
 add.mask <- function(matrix, meta.data, argument, mask.name, probe = TRUE) {
+
+  #################################################################################################
+  # Description: adds a sub-grouping mask to a load.mtx() matrix
+  # 
+  # Input: load.mtx() matrix, data frame from protocol csv, logical argument for subgrouping, name
+  # of sub-group (for legend), protocol type (FALSE for gallery, TRUE for probe)
+  #
+  # Output: load.mtx() matrix + subgroup mask 
+  #################################################################################################
   
   #generate mask from given argument
   output <- unique(meta.data$TEMPLATE_ID) %in% meta.data$TEMPLATE_ID[eval(parse(text = argument))]
@@ -354,8 +394,67 @@ add.mask <- function(matrix, meta.data, argument, mask.name, probe = TRUE) {
   return(matrix)
 }
 
-# Get list[[i]]$sub.element for all i in list
-get.sub.elements <- function(list, sub.element) {
+
+intersect <- function(matrix, mask.1, mask.2, name, argument = "and", clear.old = FALSE) {
+  
+  #################################################################################################
+  # Description: combine masks to account for the complexity within templates
+  # 
+  # Input: load.mtx() matrix, mask 1 index, mask 2 index, name of logical operator to be used,
+  # delete masks used to make new mask? (T/F)
+  #
+  # Output: logical (TRUE/FALSE) mask
+  #################################################################################################
+  
+  mask.1.data <- matrix$group[[mask.1]]$mask
+  mask.2.data <- matrix$group[[mask.2]]$mask
+  probe <- matrix$group[[mask.1]]$probe
+  
+  if (matrix$group[[mask.1]]$probe != matrix$group[[mask.2]]$probe) {
+    message("Gallery masks cannot be combined with probe masks!")
+    stop()
+  }
+  
+  if(argument == "and") {
+    new.mask <- mask.1.data & mask.2.data
+  } else if (argument == "or") {
+    new.mask <- mask.1.data | mask.2.data
+  } else if (argument == "xor") {
+    new.mask <- xor(mask.1.data, mask.2.data)
+  } else {
+    message("Argument not recognized! Recognized arguments are: and, or, xor")
+    return(NULL)
+  }
+  
+  if (clear.old == TRUE) {
+    matrix$group[[mask.1]] <- NULL
+    if (mask.1 > mask.2) {
+      matrix$group[[mask.2]] <- NULL
+    } else {
+      matrix$group[[mask.2 - 1]] <- NULL
+    }
+  }
+  
+  matrix$group[[length(matrix$group) + 1]] <- list(mask = new.mask,
+                                               name = name,
+                                               probe = probe)
+  
+  return(matrix)
+}
+
+
+sub.elements <- function(list, sub.element) {
+  
+  #################################################################################################
+  # Description: get a list of sub-elements from a higher-level list. For instance, if you have
+  # five load.mtx() matrices and you want to grab their $matrix data only, this function can extract
+  # just those requested elements from the higher-level list.
+  # 
+  # Input: higher-level list (of anything)
+  #
+  # Output: lower-level elements
+  #################################################################################################
+  
   output <- list()
   for(i in 1:length(list)) {
     output[[i]] <- getElement(list[[i]], sub.element)
