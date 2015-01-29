@@ -1,5 +1,5 @@
 load.mtx <- function(matrix, mask, gal = FALSE, probe = FALSE) {
-
+  
   ######################################################################################
   # Description: this function loads a matrix and mask, with optional parameters
   # for associated gallery and probe .csv files, and outputs a list of useful
@@ -69,22 +69,27 @@ load.mtx <- function(matrix, mask, gal = FALSE, probe = FALSE) {
     probe.data <- read.csv(probe)
     probe <- normalizePath(probe)
   }
-  #organize gal and probe in "protocol" list
-  if (!exists("gal.data")) gal.data <- FALSE
-  if (!exists("probe.data")) probe.data <- FALSE
-  protocol <- list(gal = gal.data, probe = probe.data)
   
   output <- list(matrix = matrix.data,
                  mask = mask.data,
                  dimensions = dim,
                  distance = distance,
-                 protocol = protocol,
+                 gal = gal.data,
+                 probe = probe.data,
                  n.failed = sum(matrix.data < -3.402*10^38),
                  ignored = ignored,
                  filename = list(matrix = normalizePath(matrix),
-                                  mask = normalizePath(mask),
-                                  gal = gal,
-                                  probe = probe))
+                                 mask = normalizePath(mask),
+                                 gal = gal,
+                                 probe = probe))
+  
+#   if(check.templates(output, table = FALSE) > 0) {
+#     message("Matrix and Protocol mismatch:")
+#     message(sprintf("--Matrix %s", output$filename$matrix))
+#     message(sprintf("--Probe %s", output$filename$probe))
+#     
+#     output$mismatch <- check.templates(output, table = TRUE)
+#   }
   
   return(output)
 }
@@ -159,7 +164,7 @@ get.roc.points <- function(data, n.points = 500, distance = FALSE, response = da
 
 
 get.roc.subgroup <- function(data, n.points = 500, distance = FALSE, response = data$resp) {
-
+  
   ######################################################################################
   # Description: this function calculates a separate ROC curve for however many masks
   # have been added to the input data matrix using the add.mask() function.
@@ -181,7 +186,7 @@ get.roc.subgroup <- function(data, n.points = 500, distance = FALSE, response = 
       group.mask <- as.vector(matrix(data$mask, data$dimensions[2], data$dimensions[1])[,data$group[[i]]$mask])
     } else {
       #apply the mask by converting the .mask and .mtx scores to matrix form, and removing the masked rows
-      group <- as.vector(matrix(data$matrix, data$dimensions[2], data$dimensions[1])[data$group[[i]]$mask,])
+      group.matrix <- as.vector(matrix(data$matrix, data$dimensions[2], data$dimensions[1])[data$group[[i]]$mask,])
       group.mask <- as.vector(matrix(data$mask, data$dimensions[2], data$dimensions[1])[data$group[[i]]$mask,])
     }
     
@@ -202,7 +207,7 @@ get.roc.subgroup <- function(data, n.points = 500, distance = FALSE, response = 
 
 
 plot.roc <- function(data, add = FALSE, ...) {
-
+  
   ######################################################################################
   # Description: this function uses the plot function with defaults optimized for ROC
   # curve plotting. Set "add = TRUE" to add a new line to an existing graph.
@@ -263,7 +268,7 @@ plot.rocs <- function(roc.list, add = FALSE, legend = TRUE, col = rainbow(length
 }
 
 
-load.matrices<-function(shared.drive, algorithm.name, track, split) {
+load.matrices<-function(shared.drive, algorithm.name, track, split, protocol.folder = sprintf("%s/CS0/protocol/",shared.drive)) {
   
   ######################################################################################
   # Description: Get multiple matrices
@@ -277,43 +282,47 @@ load.matrices<-function(shared.drive, algorithm.name, track, split) {
   output <- list()
   i <- 1
   
-  for (trk in track) {
+  for (trk in toupper(track)) {
     for (spl in split) {
       
       if (algorithm.name == "COTS1") {
         
         output[[i]] <- load.mtx(sprintf("%s/CS0/benchmarks/COTS1/split%s/verify_%s_%s.mtx", shared.drive, spl, spl, trk),
                                 sprintf("%s/CS0/benchmarks/COTS1/split%s/verify_%s_%s.mask", shared.drive, spl, spl, trk),
-                                sprintf("%s/CS0/protocol/split%s/test_%s_%s_gal.csv", shared.drive, spl, spl, trk),
-                                sprintf("%s/CS0/protocol/split%s/test_%s_%s_probe.csv", shared.drive, spl, spl, trk))
+                                sprintf("%s/split%s/test_%s_%s_gal.csv", protocol.folder, spl, spl, trk),
+                                sprintf("%s/split%s/test_%s_%s_probe.csv", protocol.folder, spl, spl, trk))
         i <- i + 1
         
       } else if (algorithm.name == "COTS2") {
         
         output[[i]] <- load.mtx(sprintf("%s/CS0/benchmarks/COTS2/split%s/verify_%s_%s.mtx", shared.drive, spl, spl, trk),
                                 sprintf("%s/CS0/benchmarks/COTS2/split%s/verify_%s_%s.mask", shared.drive, spl, spl, trk),
-                                sprintf("%s/CS0/protocol/split%s/test_%s_%s_gal.csv", shared.drive, spl, spl, trk),
-                                sprintf("%s/CS0/protocol/split%s/test_%s_%s_probe.csv", shared.drive, spl, spl, trk))
+                                sprintf("%s/split%s/test_%s_%s_gal.csv", protocol.folder, spl, spl, trk),
+                                sprintf("%s/split%s/test_%s_%s_probe.csv", protocol.folder, spl, spl, trk))
         i <- i + 1
         
       } else if (algorithm.name == "stereo") {
         
-        if (spl == "6" & trk == "B") {
-          message("WARNING: at the time this code was written, stereo 6 B was not in the shared drive. Skipping it to avoid errors.")
-        } else {
-          output[[i]] <- load.mtx(sprintf("%s/stereo/stereo-results-%s-%s/scores.mtx", shared.drive, spl, tolower(trk)),
-                                  sprintf("%s/stereo/stereo-results-%s-%s/mask.mask", shared.drive, spl, tolower(trk)),
-                                  sprintf("%s/CS0/protocol/split%s/test_%s_%s_gal.csv", shared.drive, spl, spl, trk),
-                                  sprintf("%s/CS0/protocol/split%s/test_%s_%s_probe.csv", shared.drive, spl, spl, trk))
-          i <- i + 1
-        }
-                              
+        output[[i]] <- load.mtx(sprintf("%s/stereo/stereo-results-%s-%s/scores.mtx", shared.drive, spl, tolower(trk)),
+                                sprintf("%s/stereo/stereo-results-%s-%s/mask.mask", shared.drive, spl, tolower(trk)),
+                                sprintf("%s/split%s/test_%s_%s_gal.csv", protocol.folder, spl, spl, trk),
+                                sprintf("%s/split%s/test_%s_%s_probe.csv", protocol.folder, spl, spl, trk))
+        i <- i + 1
+        
       } else if (algorithm.name == "umdfv") {
         
         output[[i]] <- load.mtx(sprintf("%s/umdfv/UMD-20150102-001-%s-%s.mtx", shared.drive, trk, spl),
                                 sprintf("%s/umdfv/mask_%s%s.mask", shared.drive, spl, trk),
-                                sprintf("%s/CS0/protocol/split%s/test_%s_%s_gal.csv", shared.drive, spl, spl, trk),
-                                sprintf("%s/CS0/protocol/split%s/test_%s_%s_probe.csv", shared.drive, spl, spl, trk))
+                                sprintf("%s/split%s/test_%s_%s_gal.csv", protocol.folder, spl, spl, trk),
+                                sprintf("%s/split%s/test_%s_%s_probe.csv", protocol.folder, spl, spl, trk))
+        i <- i + 1
+        
+      } else if (algorithm.name == "umdfv2") {
+        
+        output[[i]] <- load.mtx(sprintf("%s/UMD-20150102-001-%s-%s.mtx", shared.drive, trk, spl),
+                                sprintf("%s/UMD-20150102-001-%s-%s.mask", shared.drive, spl, trk),
+                                sprintf("%s/split%s/test_%s_%s_gal.csv", protocol.folder, spl, spl, trk),
+                                sprintf("%s/split%s/test_%s_%s_probe.csv", protocol.folder, spl, spl, trk))
         i <- i + 1
         
       } else {
@@ -321,9 +330,6 @@ load.matrices<-function(shared.drive, algorithm.name, track, split) {
         message("Supported algorithms: COTS1, COTS2, stereo, umdfv")
         stop()
       }
-      
-      
-      
     }
   }
   
@@ -345,31 +351,80 @@ mean.roc <- function(data, n.points = 500) {
   # Output: mean ROC points data frame
   ######################################################################################
   
-  #Convert raw scores to ROC points
-  data <- lapply(data, get.roc.points, n.points = n.points)
-  
-  #output <- data.frame(False.Alarms = numeric(), Hits = numeric())
-  #Get means of returned data
-  
-  FAR <- matrix(nrow = length(data), ncol = length(data[[1]]$False.Alarms)) ; HR <- FAR
-  
-  #data is the list of get.roc.points output data frames
-  #data[[e]] is the current data frame
-  #data[[e]][[i]] is the current point in the current data frame
-  for (i in 1:ncol(FAR)) {
-    for (e in 1:nrow(FAR)) {
-      FAR[e,i] <- data[[e]]$False.Alarms[i]
-      HR[e,i] <- data[[e]]$Hits[i]
+  #If there are subgroups in the matrices
+  if(!is.null(getElement(data[[1]], "group"))) {
+    
+    #Convert raw scores to ROC points
+    points <- lapply(data, get.roc.subgroup, n.points = n.points)
+    
+    n.subgroups <- length(points[[1]])
+    n.matrices <- length(points)
+    
+    FAR <- list() ; HR <- list()
+    #for every subgroup
+    for (i in 1:n.subgroups) {
+      FAR[[i]] <- numeric()
+      HR[[i]] <- numeric()
     }
+    
+    #for every matrix
+    for (i in 1:n.matrices) {
+      #for every subgroup
+      for (j in 1:n.subgroups) {
+        FAR[[j]] <- c(FAR[[j]], as.vector(points[[i]][[j]]$points$False.Alarms))
+        HR[[j]] <- c(HR[[j]], as.vector(points[[i]][[j]]$points$Hits))
+      }
+    }
+    
+    #for every subgroup
+    for (i in 1:n.subgroups) {
+      #turn the vector into a matrix
+      
+      ###THIS LINE WORKS IN THE CONSOLE###
+      #array(test[[1]][[1]], c(23,5))
+      
+      FAR[[i]] <- rowMeans(array(FAR[[i]], c(n.points+3, n.matrices)))
+      HR[[i]] <- rowMeans(array(HR[[i]], c(n.points+3, n.matrices)))
+    }
+    
+    #return(list(False.Alarms = data.frame(), FAR = FAR))
+    
+    output <- list()
+    
+    for (i in 1:n.subgroups) {
+      output[[i]] <- list(name = points[[1]][[i]]$name,
+                          points = data.frame(False.Alarms = FAR[[i]],
+                                              Hits = HR[[i]]))
+    }
+    
+    #if there are not subgroups in the matrices
+  } else {
+    #Convert raw scores to ROC points
+    data <- lapply(data, get.roc.points, n.points = n.points)
+    
+    
+    #Get means of returned data
+    FAR <- matrix(nrow = length(data), ncol = length(data[[1]]$False.Alarms)) ; HR <- FAR
+    
+    #data is the list of get.roc.points output data frames
+    #data[[e]] is the current data frame
+    #data[[e]][[i]] is the current point in the current data frame
+    for (i in 1:ncol(FAR)) {
+      for (e in 1:nrow(FAR)) {
+        FAR[e,i] <- data[[e]]$False.Alarms[i]
+        HR[e,i] <- data[[e]]$Hits[i]
+      }
+    }
+    
+    output <- data.frame(False.Alarms = colMeans(FAR), Hits = colMeans(HR))
   }
   
-  output <- data.frame(False.Alarms = colMeans(FAR), Hits = colMeans(HR))
   return(output)
 }
 
 
 add.mask <- function(matrix, meta.data, argument, mask.name, probe = TRUE) {
-
+  
   #################################################################################################
   # Description: adds a sub-grouping mask to a load.mtx() matrix
   # 
@@ -436,8 +491,8 @@ intersect <- function(matrix, mask.1, mask.2, name, argument = "and", clear.old 
   }
   
   matrix$group[[length(matrix$group) + 1]] <- list(mask = new.mask,
-                                               name = name,
-                                               probe = probe)
+                                                   name = name,
+                                                   probe = probe)
   
   return(matrix)
 }
@@ -463,7 +518,7 @@ sub.elements <- function(list, sub.element) {
 }
 
 
-add.img.frame.masks <- function(matrix, meta.data, probe = TRUE, clear.old = TRUE) {
+add.img.frame.masks <- function(matrix, meta.data, probe = TRUE) {
   
   #################################################################################################
   # Description: Adds a mask for 1.) images only, 2.) video only, and 3.) both images and video.
@@ -477,10 +532,41 @@ add.img.frame.masks <- function(matrix, meta.data, probe = TRUE, clear.old = TRU
   #Get "image and video" group
   matrix <- add.mask(matrix, meta.data, "grepl('img', meta.data$FILE)", "Only video", probe = probe)
   matrix <- add.mask(matrix, meta.data, "grepl('frame', meta.data$FILE)", "Only images", probe = probe)
-  matrix <- intersect(matrix, length(matrix$group), length(matrix$group) - 1, name = "Images and video", argument = "and", clear.old = clear.old)
+  matrix <- intersect(matrix, length(matrix$group), length(matrix$group) - 1, name = "Images and video", argument = "and", clear.old = FALSE)
   
   matrix$group[[length(matrix$group) - 2]]$mask <- !matrix$group[[length(matrix$group) - 2]]$mask
   matrix$group[[length(matrix$group) - 1]]$mask <- !matrix$group[[length(matrix$group) - 1]]$mask
   
   return(matrix)
+}
+
+
+check.templates <- function(matrix, table = TRUE) {
+  
+  mat <- matrix
+  
+  matches.per.row <- rowSums(matrix(mat$mask, mat$dimensions[2], mat$dimensions[1]) == -1)
+  
+  probe.temp.per.sub <- mat$probe[,1:2]
+  probe.temp.per.sub <- probe.temp.per.sub[!duplicated(probe.temp.per.sub[,1]),]
+  probe.temp.per.sub <- as.vector(table(factor(probe.temp.per.sub[,2], levels=unique(probe.temp.per.sub[,2]))))
+  
+  print(matches.per.row == probe.temp.per.sub)
+  print(matches.per.row)
+  print(probe.temp.per.sub)
+  
+  if (table == TRUE) {
+    return(data.frame(from.mtx = matches.per.row, from.csv = probe.temp.per.sub, equal = matches.per.row == probe.temp.per.sub))
+  } else {
+    return(sum(matches.per.row != probe.temp.per.sub))
+  }
+}
+
+
+batch.img.frame.masks <- function(matrices, meta.data = matrix[[i]]$probe, probe = TRUE) {
+  for (i in 1:length(matrices)) {
+    matrices[[i]] <- add.img.frame.masks(matrices[[i]], meta.data = matrices[[i]]$probe, probe = TRUE)
+  }
+  
+  return(matrices)
 }
