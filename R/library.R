@@ -30,10 +30,12 @@ load.mtx <- function(matrix, mask, gal = FALSE, probe = FALSE) {
   #check for proper header format: if not, display warning and continue
   if (substr(header[1],2,2) != "2") message("Warning: improperly formatted matrix header")
   #get matrix dimensions
-  dim <- as.numeric(strsplit(header[4], split = " ")[[1]][2:3])
+  dim <- rev(as.numeric(strsplit(header[4], split = " ")[[1]][2:3]))
   
   #read matrix data
   matrix.data <- readBin(to.read, numeric(), n = (dim[1]*dim[2]), size = 4, endian = "little")
+  #convert vector to matrix
+  matrix.data <- array(matrix.data, dim)
   #close connection to matrix file
   close(to.read)
   
@@ -46,28 +48,38 @@ load.mtx <- function(matrix, mask, gal = FALSE, probe = FALSE) {
   ##check for proper header format: if not, display warning and continue
   if (substr(header[1],2,2) != "2") message("Warning: improperly formatted mask header")
   #check for consistent dimensions between matrix and mask: if not, display warning and continue
-  if (!identical(as.numeric(strsplit(header[4], split = " ")[[1]][2:3]), dim)) message("Warning: matrix/mask dimensions inconsistent")
+  if (!identical(rev(as.numeric(strsplit(header[4], split = " ")[[1]][2:3])), dim)) message("Warning: matrix/mask dimensions inconsistent")
   
   #read mask data
   mask.data <- as.numeric(readBin(to.read, logical(), n = (dim[1]*dim[2]), size = 1, endian = "little"))
+  #convert vector to matrix
+  mask.data <- array(mask.data, dim)
+  #close connection to mask file
   close(to.read)
   
-  #document ignored values
-  ignored <- list(n = sum(mask.data == 0),
-                  values = matrix.data[mask.data == 0])
-  
-  #remove ignored values from output
-  matrix.data <- matrix.data[mask.data != 0]
-  mask.data <- mask.data[mask.data != 0]
+#   #document ignored values
+#   ignored <- list(n = sum(mask.data == 0),
+#                   values = matrix.data[mask.data == 0])
+#   
+#   #remove ignored values from output
+#   matrix.data <- matrix.data[mask.data != 0]
+#   mask.data <- mask.data[mask.data != 0]
   
   #if entered: load protocol CSVs
   if (!is.logical(gal)) {
     gal.data <- read.csv(gal)
     gal <- normalizePath(gal)
-  }
+  } else gal.data <- gal
   if (!is.logical(probe)) {
     probe.data <- read.csv(probe)
     probe <- normalizePath(probe)
+  } else probe.data <- probe
+  
+  if (!is.logical(gal) & !is.logical(probe)) {
+    rownames(matrix.data) <- unique(gal.data$TEMPLATE_ID)
+    colnames(matrix.data) <- unique(probe.data$TEMPLATE_ID)
+    rownames(mask.data) <- unique(gal.data$TEMPLATE_ID)
+    colnames(mask.data) <- unique(probe.data$TEMPLATE_ID)
   }
   
   output <- list(matrix = matrix.data,
@@ -77,7 +89,6 @@ load.mtx <- function(matrix, mask, gal = FALSE, probe = FALSE) {
                  gal = gal.data,
                  probe = probe.data,
                  n.failed = sum(matrix.data < -3.402*10^38),
-                 ignored = ignored,
                  filename = list(matrix = normalizePath(matrix),
                                  mask = normalizePath(mask),
                                  gal = gal,
@@ -95,7 +106,7 @@ load.mtx <- function(matrix, mask, gal = FALSE, probe = FALSE) {
 }
 
 
-get.roc.points <- function(data, n.points = 500, distance = FALSE, response = data$resp) {
+get.roc.points <- function(data, n.points = 500, distance = FALSE) {
   
   ######################################################################################
   # Description: this function takes formatted data and plots the points of an ROC curve
@@ -113,10 +124,10 @@ get.roc.points <- function(data, n.points = 500, distance = FALSE, response = da
     match[data$mask == -1] <- "m"
     match[data$mask == 127] <- "nm"
     
-    data <- data.frame(match = match, resp = data$matrix)
-    
-    response <- data$resp
+    data <- data.frame(match = match, resp = as.vector(data$matrix))
   }
+  
+  response <- data$resp
   
   #Define a variable just below the (functionally) Inf value to limit the range to actual values
   pre.inf <- 3.402*10^38
@@ -163,7 +174,7 @@ get.roc.points <- function(data, n.points = 500, distance = FALSE, response = da
 }
 
 
-get.roc.subgroup <- function(data, n.points = 500, distance = FALSE, response = data$resp) {
+get.roc.subgroup <- function(data, n.points = 500, distance = FALSE) {
   
   ######################################################################################
   # Description: this function calculates a separate ROC curve for however many masks
@@ -179,34 +190,33 @@ get.roc.subgroup <- function(data, n.points = 500, distance = FALSE, response = 
   
   #for each mask defined in the "group" list in the data matrix
   for(i in 1:length(data$group)) {
-    #if the mask applies to the gallery (rows) or probe (columns)
-    if (data$group[[i]]$probe == TRUE) {
-      #apply the mask by converting the .mask and .mtx scores to matrix form, and removing the masked columns
-      group.matrix <- as.vector(matrix(data$matrix, data$dimensions[2], data$dimensions[1])[,data$group[[i]]$mask])
-      group.mask <- as.vector(matrix(data$mask, data$dimensions[2], data$dimensions[1])[,data$group[[i]]$mask])
+    
+    if (sum(data$group[[i]]$mask) == 0) {
+      output[[i]] <- list(name = sprintf("%s (no data)", data$group[[i]]$name), points = NULL)
+      message(sprintf("No items in '%s' mask", data$group[[i]]$name))
     } else {
-      #apply the mask by converting the .mask and .mtx scores to matrix form, and removing the masked rows
-      group.matrix <- as.vector(matrix(data$matrix, data$dimensions[2], data$dimensions[1])[data$group[[i]]$mask,])
-      group.mask <- as.vector(matrix(data$mask, data$dimensions[2], data$dimensions[1])[data$group[[i]]$mask,])
+      
+      #apply the mask to the data
+      group.matrix <- data$matrix[data$group[[i]]$mask]
+      group.mask <- data$mask[data$group[[i]]$mask]
+      
+      #convert masked data to get.roc.points() format (data frame with "match" and "resp" columns)
+      match <- character()
+      match[group.mask == -1] <- "m"
+      match[group.mask == 127] <- "nm"
+      group.data <- data.frame(match = match, resp = as.vector(group.matrix))
+      
+      #output a list with the provided subgroup title and roc points (this repeats for each mask in data$group)
+      output[[i]] <- list(name = data$group[[i]]$name, points = get.roc.points(group.data, n.points = n.points,
+                                                                               distance = data$distance))
     }
-    
-    #convert masked data to get.roc.points() format (data frame with "match" and "resp" columns)
-    distance = data$distance
-    match <- character()
-    match[group.mask == -1] <- "m"
-    match[group.mask == 127] <- "nm"
-    group.data <- data.frame(match = match, resp = group.matrix)
-    
-    #output a list with the provided subgroup title and roc points (this repeats for each mask in data$group)
-    output[[i]] <- list(name = data$group[[i]]$name, points = get.roc.points(group.data, n.points = n.points,
-                                                                             distance = distance))
   } #end of loop
   
   return(output)
 }
 
 
-plot.roc <- function(data, add = FALSE, ...) {
+plot.roc <- function(data, add = FALSE, n.points = 500, col = NULL, legend = TRUE, name = "data", ...) {
   
   ######################################################################################
   # Description: this function uses the plot function with defaults optimized for ROC
@@ -217,54 +227,36 @@ plot.roc <- function(data, add = FALSE, ...) {
   # Output: roc graph
   ######################################################################################
   
-  if (!is.null(getElement(data, "matrix")) & !is.null(getElement(data, "mask")) & !is.null(getElement(data, "distance"))) {
-    data <- get.roc.points(data, distance = data$distance)
+  if(!is.null(getElement(data, "group"))) {
+    data <- get.roc.subgroup(data, n.points = n.points, distance = data$distance)
+  } else if (!is.null(getElement(data, "matrix")) & !is.null(getElement(data, "mask")) & !is.null(getElement(data, "distance"))) {
+    data <- list(list(name = name, points = get.roc.points(data, n.points = n.points, distance = data$distance)))
   }
   
   args <- list(...)
   
-  data[data == 0] <- 1*10^-50
-  
-  args <- c(args, list(x = data))
   if (is.null(getElement(args, "type"))) args$type <- "l"
-  if (is.null(getElement(args, "col"))) args$col <- "blue"
+  if (is.null(col)) col <- rainbow(length(data))
   
-  if (add == TRUE) do.call(lines, args)
-  else do.call(plot, args)
-}
-
-
-plot.rocs <- function(roc.list, add = FALSE, legend = TRUE, col = rainbow(length(roc.list)), ...) {
-  
-  ######################################################################################
-  # Description: this function iterates the plot.roc() function for every ROC subgroup
-  # contained in the input variable you feed it, drawing a new line for each group.
-  #
-  # Input: load.mtx() + add.mask() output, or get.roc.subgroup() output; add to existing
-  # plot? (TRUE for yes, FALSE for no); plot legend? (T/F); vector of ROC curve colors
-  #
-  # Output: ROC graph.
-  ######################################################################################
-  
-  args <- list(...)
-  
-  if(!is.null(getElement(roc.list, "group"))) {
-    roc.list <- get.roc.subgroup(roc.list)
-  }
-  
-  plot.roc(roc.list[[1]]$points, add = add, col = col[1], args)
-  
-  if(length(roc.list) > 1) {
-    for(i in 2:length(roc.list)) {
-      plot.roc(roc.list[[i]]$points, add = TRUE, col = col[i])
+  for (i in 1:length(data)) {
+    
+    if (!is.null(data[[i]]$points)) {
+      #data[[i]]$points[data[[i]]$points == 0] <- 1*10^-50
+      args$x = data[[i]]$points
+      args$col <- col[i]
+      
+      if (add == TRUE) do.call(lines, args)
+      else do.call(plot, args)
+      
+      add <- TRUE
     }
   }
   
   if(legend == TRUE) {
-    legend(x = "bottomright", legend = sub.elements(roc.list, "name"), fill = col)
+    legend(x = "bottomright", legend = sub.elements(data, "name"), fill = col)
   }
   
-  return(list(names = unlist(sub.elements(roc.list, "name")), color = col))
+  return(list(names = unlist(sub.elements(data, "name")), color = col))
 }
 
 
@@ -278,27 +270,42 @@ load.matrices<-function(shared.drive, algorithm.name, track, split, protocol.fol
   # Output: list of load.mtx() matrices
   ######################################################################################
   
-  split <- as.character(split)
   output <- list()
   i <- 1
   
   for (trk in toupper(track)) {
-    for (spl in split) {
+    for (spl in as.character(split)) {
       
       if (algorithm.name == "COTS1") {
         
+        if (protocol.folder == sprintf("%s/CS0/protocol/",shared.drive)) {
+          gal <- FALSE
+          probe <- FALSE
+        } else {
+          gal <- sprintf("%s/split%s/test_%s_%s_gal.csv", protocol.folder, spl, spl, trk)
+          probe <- sprintf("%s/split%s/test_%s_%s_probe.csv", protocol.folder, spl, spl, trk)
+        }
+        
         output[[i]] <- load.mtx(sprintf("%s/CS0/benchmarks/COTS1/split%s/verify_%s_%s.mtx", shared.drive, spl, spl, trk),
                                 sprintf("%s/CS0/benchmarks/COTS1/split%s/verify_%s_%s.mask", shared.drive, spl, spl, trk),
-                                sprintf("%s/split%s/test_%s_%s_gal.csv", protocol.folder, spl, spl, trk),
-                                sprintf("%s/split%s/test_%s_%s_probe.csv", protocol.folder, spl, spl, trk))
+                                gal,
+                                probe)
         i <- i + 1
         
       } else if (algorithm.name == "COTS2") {
         
+        if (protocol.folder == sprintf("%s/CS0/protocol/",shared.drive)) {
+          gal <- FALSE
+          probe <- FALSE
+        } else {
+          gal <- sprintf("%s/split%s/test_%s_%s_gal.csv", protocol.folder, spl, spl, trk)
+          probe <- sprintf("%s/split%s/test_%s_%s_probe.csv", protocol.folder, spl, spl, trk)
+        }
+        
         output[[i]] <- load.mtx(sprintf("%s/CS0/benchmarks/COTS2/split%s/verify_%s_%s.mtx", shared.drive, spl, spl, trk),
                                 sprintf("%s/CS0/benchmarks/COTS2/split%s/verify_%s_%s.mask", shared.drive, spl, spl, trk),
-                                sprintf("%s/split%s/test_%s_%s_gal.csv", protocol.folder, spl, spl, trk),
-                                sprintf("%s/split%s/test_%s_%s_probe.csv", protocol.folder, spl, spl, trk))
+                                gal,
+                                probe)
         i <- i + 1
         
       } else if (algorithm.name == "stereo") {
@@ -423,7 +430,7 @@ mean.roc <- function(data, n.points = 500) {
 }
 
 
-add.mask <- function(matrix, meta.data, argument, mask.name, probe = TRUE) {
+add.mask <- function(matrix, argument, mask.name, probe = TRUE, meta.data = NULL) {
   
   #################################################################################################
   # Description: adds a sub-grouping mask to a load.mtx() matrix
@@ -434,12 +441,29 @@ add.mask <- function(matrix, meta.data, argument, mask.name, probe = TRUE) {
   # Output: load.mtx() matrix + subgroup mask 
   #################################################################################################
   
+  if (is.null(meta.data) & probe == TRUE) {
+    meta.data <- matrix$probe
+  } else if (is.null(meta.data) & probe == FALSE) {
+    meta.data <- matrix$gal
+  }
+  
   #generate mask from given argument
-  output <- unique(meta.data$TEMPLATE_ID) %in% meta.data$TEMPLATE_ID[eval(parse(text = argument))]
+  if (probe == TRUE) {
+    output <- colnames(matrix$matrix) %in% meta.data$TEMPLATE_ID[eval(parse(text = argument))]
+  } else {
+    output <- rownames(matrix$matrix) %in% meta.data$TEMPLATE_ID[eval(parse(text = argument))]
+  }
+  
+  names(output) <- unique(meta.data$TEMPLATE_ID)
+  
+  if (probe == TRUE) {
+    output <- array(rep(output, each = matrix$dimensions[1]), c(matrix$dimensions[1],matrix$dimensions[2]))
+  } else {
+    output <- array(rep(output, times = matrix$dimensions[1]), c(matrix$dimensions[1],matrix$dimensions[2]))
+  }
   
   mask <- list(mask = output, name = mask.name, probe = probe)
   
-  #if this 
   if (!is.null(getElement(matrix, "group"))) {
     matrix$group[[length(matrix$group) + 1]] <- mask
   } else {
@@ -514,11 +538,12 @@ sub.elements <- function(list, sub.element) {
   for(i in 1:length(list)) {
     output[[i]] <- getElement(list[[i]], sub.element)
   }
+  
   return(output)
 }
 
 
-add.img.frame.masks <- function(matrix, meta.data, probe = TRUE) {
+add.img.frame.masks <- function(matrix, probe = TRUE, meta.data = NULL) {
   
   #################################################################################################
   # Description: Adds a mask for 1.) images only, 2.) video only, and 3.) both images and video.
@@ -529,9 +554,15 @@ add.img.frame.masks <- function(matrix, meta.data, probe = TRUE) {
   # Output: load.mtx() matrices + subgroup masks
   #################################################################################################
   
+  if (is.null(meta.data) & probe == TRUE) {
+    meta.data <- matrix$probe
+  } else if (is.null(meta.data) & probe == FALSE) {
+    meta.data <- matrix$gal
+  }
+  
   #Get "image and video" group
-  matrix <- add.mask(matrix, meta.data, "grepl('img', meta.data$FILE)", "Only video", probe = probe)
-  matrix <- add.mask(matrix, meta.data, "grepl('frame', meta.data$FILE)", "Only images", probe = probe)
+  matrix <- add.mask(matrix, "grepl('img', meta.data$FILE)", "Only video", probe = probe)
+  matrix <- add.mask(matrix, "grepl('frame', meta.data$FILE)", "Only images", probe = probe)
   matrix <- intersect(matrix, length(matrix$group), length(matrix$group) - 1, name = "Images and video", argument = "and", clear.old = FALSE)
   
   matrix$group[[length(matrix$group) - 2]]$mask <- !matrix$group[[length(matrix$group) - 2]]$mask
@@ -563,9 +594,19 @@ check.templates <- function(matrix, table = TRUE) {
 }
 
 
-batch.img.frame.masks <- function(matrices, meta.data = matrix[[i]]$probe, probe = TRUE) {
+batch.img.frame.masks <- function(matrices, probe = TRUE, meta.data = NULL) {
+  
   for (i in 1:length(matrices)) {
-    matrices[[i]] <- add.img.frame.masks(matrices[[i]], meta.data = matrices[[i]]$probe, probe = TRUE)
+    
+    if (is.null(meta.data) & probe == TRUE) {
+      protocol <- matrices[[i]]$probe
+    } else if (is.null(meta.data) & probe == FALSE) {
+      protocol <- matrices[[i]]$gal
+    } else {
+      protocol <- meta.data
+    }
+    
+    matrices[[i]] <- add.img.frame.masks(matrices[[i]], meta.data = protocol, probe = probe)
   }
   
   return(matrices)
