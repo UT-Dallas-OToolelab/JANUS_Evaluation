@@ -231,6 +231,8 @@ plot.roc <- function(data, add = FALSE, n.points = 500, col = NULL, legend = TRU
     data <- get.roc.subgroup(data, n.points = n.points, distance = data$distance)
   } else if (!is.null(getElement(data, "matrix")) & !is.null(getElement(data, "mask")) & !is.null(getElement(data, "distance"))) {
     data <- list(list(name = name, points = get.roc.points(data, n.points = n.points, distance = data$distance)))
+  } else if (class(data) == "data.frame") {
+    data <- list(list(name = name, points = data))
   }
   
   args <- list(...)
@@ -241,13 +243,13 @@ plot.roc <- function(data, add = FALSE, n.points = 500, col = NULL, legend = TRU
   for (i in 1:length(data)) {
     
     if (!is.null(data[[i]]$points)) {
-      #data[[i]]$points[data[[i]]$points == 0] <- 1*10^-50
       args$x = data[[i]]$points
       args$col <- col[i]
       
       if (add == TRUE) do.call(lines, args)
       else do.call(plot, args)
       
+      if (!is.null(getElement(args, "log"))) args$log <- NULL
       add <- TRUE
     }
   }
@@ -326,8 +328,8 @@ load.matrices<-function(shared.drive, algorithm.name, track, split, protocol.fol
         
       } else if (algorithm.name == "umdfv2") {
         
-        output[[i]] <- load.mtx(sprintf("%s/UMD-20150102-001-%s-%s.mtx", shared.drive, trk, spl),
-                                sprintf("%s/UMD-20150102-001-%s-%s.mask", shared.drive, spl, trk),
+        output[[i]] <- load.mtx(sprintf("%s/UMD-20150102-002-%s-%s.mtx", shared.drive, trk, spl),
+                                sprintf("%s/UMD-20150102-002-%s-%s.mask", shared.drive, trk, spl),
                                 sprintf("%s/split%s/test_%s_%s_gal.csv", protocol.folder, spl, spl, trk),
                                 sprintf("%s/split%s/test_%s_%s_probe.csv", protocol.folder, spl, spl, trk))
         i <- i + 1
