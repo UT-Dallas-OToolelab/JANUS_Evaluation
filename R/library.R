@@ -117,7 +117,7 @@ get.roc.points <- function(data, n.points = 500, distance = FALSE) {
   # Output: roc points
   ######################################################################################
   
-  #Allow load.br.matrix matrices to be input directly into this function
+  #Allow load.mtx matrices to be input directly into this function
   if (!is.null(getElement(data, "matrix")) & !is.null(getElement(data, "mask")) & !is.null(getElement(data, "distance"))) {
     distance = data$distance
     match <- character()
@@ -258,7 +258,7 @@ plot.roc <- function(data, add = FALSE, n.points = 500, col = NULL, legend = TRU
     legend(x = "bottomright", legend = sub.elements(data, "name"), fill = col)
   }
   
-  return(list(names = unlist(sub.elements(data, "name")), color = col))
+  return(list(names = unlist(sub.elements(data, "name")), color = col, n = unlist(sub.elements(data, "n"))))
 }
 
 
@@ -432,7 +432,7 @@ mean.roc <- function(data, n.points = 500) {
 }
 
 
-add.mask <- function(matrix, argument, mask.name, probe = TRUE, meta.data = NULL) {
+add.mask <- function(matrix, argument, mask.name, probe = TRUE, meta.data = NULL, type = "containing") {
   
   #################################################################################################
   # Description: adds a sub-grouping mask to a load.mtx() matrix
@@ -450,13 +450,21 @@ add.mask <- function(matrix, argument, mask.name, probe = TRUE, meta.data = NULL
   }
   
   #generate mask from given argument
-  if (probe == TRUE) {
-    output <- colnames(matrix$matrix) %in% meta.data$TEMPLATE_ID[eval(parse(text = argument))]
+  if (type == "only") {
+    if (probe == TRUE) {
+      output <- colnames(matrix$matrix) %in% meta.data$TEMPLATE_ID[eval(parse(text = argument))]
+      output <- output & !(colnames(matrix$matrix) %in% meta.data$TEMPLATE_ID[!eval(parse(text = argument))])
+    } else {
+      output <- rownames(matrix$matrix) %in% meta.data$TEMPLATE_ID[eval(parse(text = argument))]
+      output <- output & !(rownames(matrix$matrix) %in% meta.data$TEMPLATE_ID[!eval(parse(text = argument))])
+    }
   } else {
-    output <- rownames(matrix$matrix) %in% meta.data$TEMPLATE_ID[eval(parse(text = argument))]
+    if (probe == TRUE) {
+      output <- colnames(matrix$matrix) %in% meta.data$TEMPLATE_ID[eval(parse(text = argument))]
+    } else {
+      output <- rownames(matrix$matrix) %in% meta.data$TEMPLATE_ID[eval(parse(text = argument))]
+    }
   }
-  
-  names(output) <- unique(meta.data$TEMPLATE_ID)
   
   if (probe == TRUE) {
     output <- array(rep(output, each = matrix$dimensions[1]), c(matrix$dimensions[1],matrix$dimensions[2]))
@@ -464,7 +472,9 @@ add.mask <- function(matrix, argument, mask.name, probe = TRUE, meta.data = NULL
     output <- array(rep(output, times = matrix$dimensions[1]), c(matrix$dimensions[1],matrix$dimensions[2]))
   }
   
-  mask <- list(mask = output, name = mask.name, probe = probe)
+  mask <- list(mask = output, name = mask.name, probe = probe, n = sum(output))
+  
+  if (mask$n == 0) message(sprintf("WARNING: mask '%s' contains no values", mask$name))
   
   if (!is.null(getElement(matrix, "group"))) {
     matrix$group[[length(matrix$group) + 1]] <- mask
@@ -476,7 +486,7 @@ add.mask <- function(matrix, argument, mask.name, probe = TRUE, meta.data = NULL
 }
 
 
-intersect <- function(matrix, mask.1, mask.2, name, argument = "and", clear.old = FALSE) {
+combine.masks <- function(matrix, mask.1, mask.2, name, argument = "and", clear.old = FALSE) {
   
   #################################################################################################
   # Description: combine masks to account for the complexity within templates
@@ -502,8 +512,10 @@ intersect <- function(matrix, mask.1, mask.2, name, argument = "and", clear.old 
     new.mask <- mask.1.data | mask.2.data
   } else if (argument == "xor") {
     new.mask <- xor(mask.1.data, mask.2.data)
+  } else if (argument == "nor") {
+    new.mask <- !(mask.1.data | mask.2.data)
   } else {
-    message("Argument not recognized! Recognized arguments are: and, or, xor")
+    message("Argument not recognized! Recognized arguments are: and, or, xor, nor")
     return(NULL)
   }
   
@@ -545,7 +557,7 @@ sub.elements <- function(list, sub.element) {
 }
 
 
-add.img.frame.masks <- function(matrix, probe = TRUE, meta.data = NULL) {
+add.img.frame.masks <- function(matrix, probe = TRUE, meta.data = NULL, img = TRUE, frame = TRUE, both = TRUE) {
   
   #################################################################################################
   # Description: Adds a mask for 1.) images only, 2.) video only, and 3.) both images and video.
@@ -563,12 +575,10 @@ add.img.frame.masks <- function(matrix, probe = TRUE, meta.data = NULL) {
   }
   
   #Get "image and video" group
-  matrix <- add.mask(matrix, "grepl('img', meta.data$FILE)", "Only video", probe = probe)
-  matrix <- add.mask(matrix, "grepl('frame', meta.data$FILE)", "Only images", probe = probe)
-  matrix <- intersect(matrix, length(matrix$group), length(matrix$group) - 1, name = "Images and video", argument = "and", clear.old = FALSE)
-  
-  matrix$group[[length(matrix$group) - 2]]$mask <- !matrix$group[[length(matrix$group) - 2]]$mask
-  matrix$group[[length(matrix$group) - 1]]$mask <- !matrix$group[[length(matrix$group) - 1]]$mask
+  if (frame == TRUE) matrix <- add.mask(matrix, "grepl('frame', meta.data$FILE)", "Only video", probe = probe, type = "only")
+  if (img == TRUE) matrix <- add.mask(matrix, "grepl('img', meta.data$FILE)", "Only images", probe = probe, type = "only")
+  if (both == TRUE) matrix <- combine.masks(matrix, length(matrix$group), length(matrix$group) - 1, name = "Images and video",
+                                            argument = "nor", clear.old = FALSE)
   
   return(matrix)
 }
