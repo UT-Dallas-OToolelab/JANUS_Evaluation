@@ -486,6 +486,13 @@ add.mask <- function(matrix, argument, mask.name, probe = TRUE, meta.data = NULL
 }
 
 
+batch.add.mask <- function(matrices, argument, mask.name, probe = TRUE, containing = TRUE) {
+  for (i in 1:length(matrices)) {
+    output <- add.mask(matrices[[i]], argument = argument, mask.name = mask.name, probe = probe, containing = containing)
+  }
+}
+
+
 combine.masks <- function(matrix, mask.1, mask.2, name, argument = "and", clear.old = FALSE) {
   
   #################################################################################################
@@ -500,11 +507,6 @@ combine.masks <- function(matrix, mask.1, mask.2, name, argument = "and", clear.
   mask.1.data <- matrix$group[[mask.1]]$mask
   mask.2.data <- matrix$group[[mask.2]]$mask
   probe <- matrix$group[[mask.1]]$probe
-  
-  if (matrix$group[[mask.1]]$probe != matrix$group[[mask.2]]$probe) {
-    message("Gallery masks cannot be combined with probe masks!")
-    stop()
-  }
   
   if(argument == "and") {
     new.mask <- mask.1.data & mask.2.data
@@ -622,4 +624,71 @@ batch.img.frame.masks <- function(matrices, probe = TRUE, meta.data = NULL) {
   }
   
   return(matrices)
+}
+
+visualize <- function(data, square = TRUE, ...) {
+  
+  #################################################################################################
+  # Description: Visualize data in a matrix table without the weird defaults of heatmap() and image()
+  # 
+  # Input: Matrix (as in an actual n x m matrix of data)
+  #
+  # Output: "heat map" of values in the matrix
+  #################################################################################################
+  
+  args <- list(...)
+  if (is.null(getElement(args, "asp")) & square == TRUE) args$asp <- nrow(data)/ncol(data)
+  data <- t(data[nrow(data):1,])
+  args$x <- data
+  do.call(image, args)
+}
+
+
+plot.cmc <- function(matrix, n.points = nrow(matrix$matrix), plot = TRUE, add = FALSE, ...) {
+  
+  #################################################################################################
+  # Description: Plots a Cumulative Match Characteristic (CMC) curve from a matrix or precalculated points
+  # 
+  # Input: load.mtx() matrix; maximum rank to plot; plot graph, or save points?; add to existing plot?
+  #
+  # Output: CMC graph, or CMC points, depending on value of "plot" argument
+  #################################################################################################
+  
+  #get extra user input
+  args <- list(...)
+  
+  #if the input is a data frame, assume it contains cmc points and skip calculating them
+  if(class(matrix) == "data.frame") cmc <- matrix
+  else {
+    
+    #initialize variables for loop
+    match.ranks <- numeric()
+    rank <- numeric()
+    rr <- numeric()
+    
+    #for every column, get the rank (in descending order) of that column's matched pair
+    for (i in 1:ncol(matrix$matrix)) {
+      #If the scores are similarity scores, flip the sign to reverse the rank order
+      if (matrix$distance == FALSE) col.values <- -matrix$matrix[,i]
+      else col.values <- matrix$matrix[,i]
+      #get the rank of this column's matched pair
+      match.ranks[i] <- rank(col.values)[matrix$mask[,i] == -1]
+    }
+    #for every point to be plotted (defaults to number of rows -- the highest possible rank)
+    for (i in 1:n.points) {
+      rank[i] <- i
+      rr[i] <- sum(match.ranks <= i)
+    }
+    rr <- rr/max(rr)
+    cmc <- data.frame(Rank = rank, Retrieval.Rate = rr)
+  }
+  
+  if (plot == TRUE) {
+    if (is.null(getElement(args, "type"))) args$type <- "l"
+    args$x <- cmc
+    
+    if (add == FALSE) do.call("plot", args)
+    else do.call("lines", args)
+  }
+  else return(cmc)
 }
