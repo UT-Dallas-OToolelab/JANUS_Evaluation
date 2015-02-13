@@ -10,7 +10,7 @@ load.mtx <- function(matrix, mask, gal = FALSE, probe = FALSE) {
   #
   # Output: 6 item list:
   # 1) Matrix similarity data (numeric vector of similarity/distance scores)
-  # 2) Mask data (numeric vector: -1 == match, 127 == non-match, 0 == ignored)
+  # 2) Mask data (numeric vector: TRUE == match, FALSE == non-match, 0 == ignored)
   # 3) Matrix dimensions (numeric vector: rows x columns)
   # 4) Distance (logical value: TRUE for distance scores, FALSE for similarity scores)
   # 5) Protocol (2 item list: 1 - gallery csv data, 2 - probe csv data)
@@ -34,8 +34,6 @@ load.mtx <- function(matrix, mask, gal = FALSE, probe = FALSE) {
   
   #read matrix data
   matrix.data <- readBin(to.read, numeric(), n = (dim[1]*dim[2]), size = 4, endian = "little")
-  #convert vector to matrix
-  matrix.data <- array(matrix.data, dim)
   #close connection to matrix file
   close(to.read)
   
@@ -52,18 +50,20 @@ load.mtx <- function(matrix, mask, gal = FALSE, probe = FALSE) {
   
   #read mask data
   mask.data <- as.numeric(readBin(to.read, logical(), n = (dim[1]*dim[2]), size = 1, endian = "little"))
+  #convert mask data to logical vector
+  mask.logical <- logical()
+  mask.logical[mask.data == -1] <- TRUE
+  mask.logical[mask.data == 127] <- FALSE
+  mask.logical <- mask.logical[mask.data != 0]
   #convert vector to matrix
-  mask.data <- array(mask.data, dim)
+  mask.mat <- array(mask.logical, dim)
   #close connection to mask file
   close(to.read)
   
-#   #document ignored values
-#   ignored <- list(n = sum(mask.data == 0),
-#                   values = matrix.data[mask.data == 0])
-#   
-#   #remove ignored values from output
-#   matrix.data <- matrix.data[mask.data != 0]
-#   mask.data <- mask.data[mask.data != 0]
+  #remove ignored values
+  matrix.data <- matrix.data[mask.data != 0]
+  #convert vector to matrix
+  matrix.data <- array(matrix.data, dim)
   
   #if entered: load protocol CSVs
   if (!is.logical(gal)) {
@@ -78,12 +78,12 @@ load.mtx <- function(matrix, mask, gal = FALSE, probe = FALSE) {
   if (!is.logical(gal) & !is.logical(probe)) {
     rownames(matrix.data) <- unique(gal.data$TEMPLATE_ID)
     colnames(matrix.data) <- unique(probe.data$TEMPLATE_ID)
-    rownames(mask.data) <- unique(gal.data$TEMPLATE_ID)
-    colnames(mask.data) <- unique(probe.data$TEMPLATE_ID)
+    rownames(mask.mat) <- unique(gal.data$TEMPLATE_ID)
+    colnames(mask.mat) <- unique(probe.data$TEMPLATE_ID)
   }
   
   output <- list(matrix = matrix.data,
-                 mask = mask.data,
+                 mask = mask.mat,
                  dimensions = dim,
                  distance = distance,
                  gal = gal.data,
@@ -121,8 +121,8 @@ get.roc.points <- function(data, n.points = 500, distance = FALSE) {
   if (!is.null(getElement(data, "matrix")) & !is.null(getElement(data, "mask")) & !is.null(getElement(data, "distance"))) {
     distance = data$distance
     match <- character()
-    match[data$mask == -1] <- "m"
-    match[data$mask == 127] <- "nm"
+    match[data$mask == TRUE] <- "m"
+    match[data$mask == FALSE] <- "nm"
     
     data <- data.frame(match = match, resp = as.vector(data$matrix))
   }
@@ -202,13 +202,15 @@ get.roc.subgroup <- function(data, n.points = 500, distance = FALSE) {
       
       #convert masked data to get.roc.points() format (data frame with "match" and "resp" columns)
       match <- character()
-      match[group.mask == -1] <- "m"
-      match[group.mask == 127] <- "nm"
+      match[group.mask == TRUE] <- "m"
+      match[group.mask == FALSE] <- "nm"
       group.data <- data.frame(match = match, resp = as.vector(group.matrix))
       
       #output a list with the provided subgroup title and roc points (this repeats for each mask in data$group)
-      output[[i]] <- list(name = data$group[[i]]$name, points = get.roc.points(group.data, n.points = n.points,
-                                                                               distance = data$distance))
+      output[[i]] <- list(name = data$group[[i]]$name,
+                          points = get.roc.points(group.data, n.points = n.points,
+                                                  distance = data$distance),
+                          n = data$group[[i]]$n)
     }
   } #end of loop
   
@@ -532,7 +534,8 @@ combine.masks <- function(matrix, mask.1, mask.2, name, argument = "and", clear.
   
   matrix$group[[length(matrix$group) + 1]] <- list(mask = new.mask,
                                                    name = name,
-                                                   probe = probe)
+                                                   probe = probe,
+                                                   n = sum(new.mask))
   
   return(matrix)
 }
@@ -590,7 +593,7 @@ check.templates <- function(matrix, table = TRUE) {
   
   mat <- matrix
   
-  matches.per.row <- rowSums(matrix(mat$mask, mat$dimensions[2], mat$dimensions[1]) == -1)
+  matches.per.row <- rowSums(matrix(mat$mask, mat$dimensions[2], mat$dimensions[1]) == TRUE)
   
   probe.temp.per.sub <- mat$probe[,1:2]
   probe.temp.per.sub <- probe.temp.per.sub[!duplicated(probe.temp.per.sub[,1]),]
@@ -644,7 +647,7 @@ visualize <- function(data, square = TRUE, ...) {
 }
 
 
-plot.cmc <- function(matrix, n.points = nrow(matrix$matrix), plot = TRUE, add = FALSE, ...) {
+plot.cmc <- function(matrix, n.points = nrow(matrix$matrix), plot = TRUE, add = FALSE, cutoff = NULL, cutoff.col = "blue", ...) {
   
   #################################################################################################
   # Description: Plots a Cumulative Match Characteristic (CMC) curve from a matrix or precalculated points
@@ -672,7 +675,7 @@ plot.cmc <- function(matrix, n.points = nrow(matrix$matrix), plot = TRUE, add = 
       if (matrix$distance == FALSE) col.values <- -matrix$matrix[,i]
       else col.values <- matrix$matrix[,i]
       #get the rank of this column's matched pair
-      match.ranks[i] <- rank(col.values)[matrix$mask[,i] == -1]
+      match.ranks[i] <- rank(col.values)[matrix$mask[,i] == TRUE]
     }
     #for every point to be plotted (defaults to number of rows -- the highest possible rank)
     for (i in 1:n.points) {
@@ -689,6 +692,14 @@ plot.cmc <- function(matrix, n.points = nrow(matrix$matrix), plot = TRUE, add = 
     
     if (add == FALSE) do.call("plot", args)
     else do.call("lines", args)
+    
+    if (!is.null(cutoff)) {
+      for (i in 1:length(cutoff)) {
+        
+        lines(cbind(c(cutoff[i],cutoff[i]), c(0, cmc[cutoff[i],2])), lty = 2, col = cutoff.col)
+        lines(cbind(c(-10,cutoff[i]), c(cmc[cutoff[i],2], cmc[cutoff[i],2])), lty = 2, col = cutoff.col)
+      }
+    }
   }
   else return(cmc)
 }
