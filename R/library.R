@@ -330,8 +330,8 @@ load.matrices<-function(shared.drive, algorithm.name, track, split, protocol.fol
         
       } else if (algorithm.name == "umdfv2") {
         
-        output[[i]] <- load.mtx(sprintf("%s/UMD-20150102-002-%s-%s.mtx", shared.drive, trk, spl),
-                                sprintf("%s/UMD-20150102-002-%s-%s.mask", shared.drive, trk, spl),
+        output[[i]] <- load.mtx(sprintf("%s/umdfv/jan-2-2015-fv-filtered-nolfwOverlap-deliverable/UMD-20150102-002-%s-%s.mtx", shared.drive, trk, spl),
+                                sprintf("%s/umdfv/jan-2-2015-fv-filtered-nolfwOverlap-deliverable/UMD-20150102-002-%s-%s.mask", shared.drive, trk, spl),
                                 sprintf("%s/split%s/test_%s_%s_gal.csv", protocol.folder, spl, spl, trk),
                                 sprintf("%s/split%s/test_%s_%s_probe.csv", protocol.folder, spl, spl, trk))
         i <- i + 1
@@ -468,6 +468,7 @@ add.mask <- function(matrix, argument, mask.name, probe = TRUE, meta.data = NULL
     }
   }
   
+  #names(output) <- unique(meta.data$TEMPLATE_ID)
   if (probe == TRUE) {
     output <- array(rep(output, each = matrix$dimensions[1]), c(matrix$dimensions[1],matrix$dimensions[2]))
   } else {
@@ -702,4 +703,32 @@ plot.cmc <- function(matrix, n.points = nrow(matrix$matrix), plot = TRUE, add = 
     }
   }
   else return(cmc)
+}
+
+mask.for.MEDIA_IDs <- function(old.data, split, components, operator){
+  new.data = old.data
+  
+  full.data <- numeric()
+  
+  for(spl in split){
+    media = paste(new.data[[spl]]$probe$TEMPLATE_ID, new.data[[spl]]$probe$MEDIA_ID, sep = ".")
+    probe.medid.per.temp = data.frame(media = media, template = new.data[[spl]]$probe$TEMPLATE_ID)
+    probe.medid.per.temp <- probe.medid.per.temp[!duplicated(probe.medid.per.temp[,1]),]
+    probe.medid.per.temp <- table(factor(probe.medid.per.temp[,2], levels=unique(probe.medid.per.temp[,2])))
+    
+    full.data = c(full.data, probe.medid.per.temp)
+    
+    probe.medid.per.temp.matrix = probe.medid.per.temp
+    
+    for(i in 1:49){
+      probe.medid.per.temp.matrix = rbind(probe.medid.per.temp.matrix, probe.medid.per.temp)
+    }
+    
+    for(com in as.character(components)){
+      argument = sprintf('probe.medid.per.temp.matrix %s %s', operator, com)
+      mask.name = sprintf('%s%s MEDIA_IDs', operator, com)
+      new.data[[spl]] = add.mask(new.data[[spl]], argument, mask.name)
+    }
+  }
+  return(new.data)
 }
