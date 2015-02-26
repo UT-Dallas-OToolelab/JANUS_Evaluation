@@ -50,6 +50,16 @@ load.mtx <- function(matrix, mask, gal = FALSE, probe = FALSE) {
   
   #read mask data
   mask.data <- as.numeric(readBin(to.read, logical(), n = (dim[1]*dim[2]), size = 1, endian = "little"))
+  #close connection to mask file
+  close(to.read)
+  
+  #remove ignored values
+  matrix.data <- matrix.data[mask.data != 0]
+  #revise dimensions
+  dim[1] <- length(matrix.data)/dim[2]
+  
+  #convert vector to matrix
+  matrix.data <- array(matrix.data, dim)
   #convert mask data to logical vector
   mask.logical <- logical()
   mask.logical[mask.data == -1] <- TRUE
@@ -57,13 +67,6 @@ load.mtx <- function(matrix, mask, gal = FALSE, probe = FALSE) {
   mask.logical <- mask.logical[mask.data != 0]
   #convert vector to matrix
   mask.mat <- array(mask.logical, dim)
-  #close connection to mask file
-  close(to.read)
-  
-  #remove ignored values
-  matrix.data <- matrix.data[mask.data != 0]
-  #convert vector to matrix
-  matrix.data <- array(matrix.data, dim)
   
   #if entered: load protocol CSVs
   if (!is.logical(gal)) {
@@ -334,6 +337,22 @@ load.matrices<-function(shared.drive, algorithm.name, track, split, protocol.fol
                                 sprintf("%s/umdfv/jan-2-2015-fv-filtered-nolfwOverlap-deliverable/UMD-20150102-002-%s-%s.mask", shared.drive, trk, spl),
                                 sprintf("%s/split%s/test_%s_%s_gal.csv", protocol.folder, spl, spl, trk),
                                 sprintf("%s/split%s/test_%s_%s_probe.csv", protocol.folder, spl, spl, trk))
+        i <- i + 1
+        
+      } else if (algorithm.name == "umdfv_CS2") {
+        
+        if (protocol.folder == sprintf("%s/CS0/protocol/",shared.drive)) {
+          gal <- FALSE
+          probe <- FALSE
+        } else {
+          gal <- sprintf("%s/CS2/protocol/split%s/gallery_%s.csv", protocol.folder, spl, spl)
+          probe <- sprintf("%s/CS2/protocol/split%s/probe_%s.csv", protocol.folder, spl, spl)
+        }
+        
+        output[[i]] <- load.mtx(sprintf("%s/UMD-20150223-003-%s.mtx", shared.drive, spl),
+                                sprintf("%s/UMD-20150223-003-%s.mask", shared.drive, spl),
+                                gal,
+                                probe)
         i <- i + 1
         
       } else {
@@ -672,11 +691,12 @@ plot.cmc <- function(matrix, n.points = nrow(matrix$matrix), plot = TRUE, add = 
     
     #for every column, get the rank (in descending order) of that column's matched pair
     for (i in 1:ncol(matrix$matrix)) {
+      print(i)
       #If the scores are similarity scores, flip the sign to reverse the rank order
       if (matrix$distance == FALSE) col.values <- -matrix$matrix[,i]
       else col.values <- matrix$matrix[,i]
       #get the rank of this column's matched pair
-      match.ranks[i] <- rank(col.values)[matrix$mask[,i] == TRUE]
+      match.ranks[i] <- rank(col.values, ties.method = "min")[matrix$mask[,i] == TRUE]
     }
     #for every point to be plotted (defaults to number of rows -- the highest possible rank)
     for (i in 1:n.points) {
