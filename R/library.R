@@ -109,7 +109,7 @@ load.mtx <- function(matrix, mask, gal = FALSE, probe = FALSE) {
 }
 
 
-get.roc.points <- function(data, n.points = 500, distance = FALSE) {
+get.roc.points <- function(data, n.points = 50, distance = FALSE) {
   
   ######################################################################################
   # Description: this function takes formatted data and plots the points of an ROC curve
@@ -349,15 +349,31 @@ load.matrices<-function(shared.drive, algorithm.name, track, split, protocol.fol
           probe <- sprintf("%s/CS2/protocol/split%s/probe_%s.csv", protocol.folder, spl, spl)
         }
         
-        output[[i]] <- load.mtx(sprintf("%s/UMD-20150223-003-%s.mtx", shared.drive, spl),
-                                sprintf("%s/UMD-20150223-003-%s.mask", shared.drive, spl),
+        output[[i]] <- load.mtx(sprintf("%s/UMD-20150226-003-%s.mtx", shared.drive, spl),
+                                sprintf("%s/UMD-20150226-003-%s.mask", shared.drive, spl),
                                 gal,
                                 probe)
         i <- i + 1
         
+      } else if (algorithm.name == "pp5") {
+        
+        if (protocol.folder == sprintf("%s/CS0/protocol/",shared.drive)) {
+          gal <- FALSE
+          probe <- FALSE
+        } else {
+          gal <- sprintf("%s/CS2/protocol/split%s/gallery_%s.csv", protocol.folder, spl, spl)
+          probe <- sprintf("%s/CS2/protocol/split%s/probe_%s.csv", protocol.folder, spl, spl)
+        }
+        
+        output[[i]] <- load.mtx(sprintf("%s/CS2/benchmarks/PP5/split%s/verify_%s.mtx", shared.drive, spl, spl),
+                                sprintf("%s/CS2/benchmarks/PP5/split%s/verify_%s.mask", shared.drive, spl, spl),
+                                sprintf("%s/CS2/protocol/split%s/gallery_%s.csv", protocol.folder, spl, spl),
+                                sprintf("%s/CS2/protocol/split%s/probe_%s.csv", protocol.folder, spl, spl))
+        i <- i + 1
+        
       } else {
         message("The algorithm you entered is not supported. Check your spelling/capitalization and try again.")
-        message("Supported algorithms: COTS1, COTS2, stereo, umdfv")
+        message("Supported algorithms: COTS1, COTS2, stereo, umdfv, umdfv2, umdfv_CS2, pp5")
         stop()
       }
     }
@@ -691,7 +707,6 @@ plot.cmc <- function(matrix, n.points = nrow(matrix$matrix), plot = TRUE, add = 
     
     #for every column, get the rank (in descending order) of that column's matched pair
     for (i in 1:ncol(matrix$matrix)) {
-      print(i)
       #If the scores are similarity scores, flip the sign to reverse the rank order
       if (matrix$distance == FALSE) col.values <- -matrix$matrix[,i]
       else col.values <- matrix$matrix[,i]
@@ -751,4 +766,53 @@ mask.for.MEDIA_IDs <- function(old.data, split, components, operator){
     }
   }
   return(new.data)
+}
+
+table.sort <- function(table, sort.by, decreasing = FALSE, sort.rows = TRUE, fresh.index = FALSE) {
+  
+  # This function sorts a data frame by a column
+  
+  if (sort.rows == TRUE) {  
+    if (decreasing == FALSE) {
+      result <- table[with(table, order(sort.by)),]
+    } else {
+      result <- table[with(table, order(-sort.by)),]
+    }
+  } else {
+    if (decreasing == FALSE) {
+      result <- table[,with(table, order(sort.by))]
+    } else {
+      result <- table[,with(table, order(-sort.by))]
+    }
+  }
+  
+  if (fresh.index == TRUE) {
+    rownames(result) <- c(1:nrow(result))
+  }
+  return(result)
+}
+
+search.cor <- function(data, arg, symmetric = TRUE, decreasing = TRUE, fresh.index = TRUE, abs = FALSE) {
+  
+  #################################################################################################
+  # Description: This function can help you find certain values in a large correlation matrix. Input
+  # the correlation matrix and an argument (e.g., "mydata > .5") and this function gives you the row
+  # name, column name, and value of each element in the matrix that meets this criteria.
+  # 
+  # Input: correlation matrix, true/false argument regarding the correlation matrix, is it a symmetric matrix? (true/false)
+  #
+  # Output: data frame of row names, column names, and matrix values
+  #################################################################################################
+  
+  if(symmetric == TRUE) arg <- arg & upper.tri(arg)
+  output <- data.frame(row = rownames(data)[which(arg)%%72],
+                       col = colnames(data)[(which(arg)%/%72)+1],
+                       val = as.vector(data)[which(arg)])
+  
+  if (abs == TRUE) sort.by <- abs(output$val)
+  else sort.by <- output$val
+  
+  output <- table.sort(output, sort.by, decreasing, fresh.index = fresh.index)
+  
+  return(output)
 }
